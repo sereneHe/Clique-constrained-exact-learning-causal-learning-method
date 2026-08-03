@@ -1,5 +1,0 @@
-method,dataset,features,samples,p,edge_ratio,degree,ori_graph_density,after_cliquefree_density,true_linear_r2,big_m,runtime_seconds,gap,fdr,tpr,fpr,shd,nnz,precision,f1score,g_score,lazy_count,cycle_lazy_count,clique_lazy_count,clique_user_count
-clique-C3,static_cliquefree-sf-5-0_gauss_d40_n2000,40,2000,0,5,1,0.256,0.235,0.865886,100.000000,1800.510,0.808598,0.031914893617021274,0.994535519125683,0.004234297812279464,6,187,0.9680851063829787,0.983784,0.967213,7423,5687,1736,0
-clique-C3,static_cliquefree-sf-5-0_gauss_d40_n2000,40,2000,0,5,2,0.256,0.235,0.869422,100.000000,1800.300,0.794840,0.0,1.0,0.0,0,183,1.0,1.000000,1.000000,8562,6404,2158,0
-clique-C3,static_cliquefree-sf-5-0_gauss_d40_n2000,40,2000,0,5,3,0.256,0.236,0.878531,100.000000,1800.610,0.776456,0.0,1.0,0.0,0,184,1.0,1.000000,1.000000,14206,10479,3727,0
-clique-C3,static_cliquefree-sf-5-0_gauss_d40_n2000,40,2000,0,5,4,0.256,0.233,0.844119,100.000000,1800.310,0.768391,0.0,1.0,0.0,0,182,1.0,1.000000,1.000000,9533,6187,3346,0

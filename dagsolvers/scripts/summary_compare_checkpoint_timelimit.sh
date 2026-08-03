@@ -15,4 +15,4 @@ export COMPARE_MODE="${COMPARE_MODE:-by_seed}"
 # 输出位置也可以在运行前通过环境变量覆盖。
 export OUTPUT_TABLE="${OUTPUT_TABLE:-${RESULTS_DIR}/第二次A-G实验记录/G_continuous_checkpoints_vs_independent_timelimits.csv}"
 
-python3 "${SCRIPT_DIR}/summary_checkpoint_timelimit.py"
+python3 "${SCRIPT_DIR}/compare_checkpoint_timelimit.py"

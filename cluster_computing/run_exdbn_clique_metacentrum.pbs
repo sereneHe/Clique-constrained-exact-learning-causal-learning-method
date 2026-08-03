@@ -6,8 +6,9 @@
 
 set -euo pipefail
 
-PROJECT=/storage/praha1/home/hexiaoyu/project-bestdagsolverintheworld
-WORK=$SCRATCHDIR/project-bestdagsolverintheworld
+PROJECT=/storage/praha1/home/hexiaoyu/project-bestdagsolverintheworld-test2
+VENV=/storage/praha1/home/hexiaoyu/project-bestdagsolverintheworld/.venv
+WORK=$SCRATCHDIR/project-bestdagsolverintheworld-test2
 OUT=$PROJECT/metacentrum_runs/$PBS_JOBID
 
 echo "Job $PBS_JOBID started at $(date)"
@@ -39,7 +40,7 @@ trap finish EXIT
 
 module add python
 
-source "$PROJECT/.venv/bin/activate"
+source "$VENV/bin/activate"
 
 rsync -a \
   --exclude .git \
@@ -70,11 +71,11 @@ echo "PYTHONPATH=$PYTHONPATH"
 
 while true; do
   sync_outputs
-  sleep 300
+  sleep 60
 done &
 SYNC_PID=$!
 echo "Background output sync started with PID $SYNC_PID"
 
-bash scripts/experiments_exdbn_clique.sh
+bash scripts/experiments_A-G.sh
 
 echo "Job $PBS_JOBID finished at $(date)"

@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # ml Gurobi/13.0.0-GCCcore-14.2.0
-# ml CPLEX/22.1.2.1-foss-2025a
 
 
 

@@ -23,9 +23,9 @@ ml Java/17
 
 #pip install dagma
 
-#pip install causal-learn
+pip install causal-learn
 
-pip install --user -r requirements-cluster.txt
+#pip install --user -r requirements-tracking.txt
 
 #cd dagsolvers
 

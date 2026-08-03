@@ -13,17 +13,38 @@ export KMP_DUPLICATE_LIB_OK=TRUE
 export EXDBN_STATIC_CSV_BASE_DIR="${DAGSOLVERS_DIR}/results/Test_new"
 export EXDBN_DISABLE_STATIC_RUNTIME_CSV=1
 
-AG_SUMMARY_OUTPUT="${DAGSOLVERS_DIR}/results/最新7种方法/ER-4-0-MISS-CDE-实验记录_100M_1800s.csv"
-mkdir -p "${EXDBN_STATIC_CSV_BASE_DIR}" "$(dirname "${AG_SUMMARY_OUTPUT}")" "${DAGSOLVERS_DIR}/multirun"
+AG_SUMMARY_OUTPUT="${EXDBN_STATIC_CSV_BASE_DIR}/A-G_experiments.csv"
+mkdir -p "${EXDBN_STATIC_CSV_BASE_DIR}" "${DAGSOLVERS_DIR}/multirun"
 
 run_and_summarize() {
     sweep_dir=$(mktemp -d "${DAGSOLVERS_DIR}/multirun/Test_new.XXXXXX")
-    sweep_summary="${sweep_dir}/A-G_experiments.csv"
+    summary_tmp="${AG_SUMMARY_OUTPUT}.tmp"
+
+    refresh_summary() {
+        if python3 ./scripts/summarize_ag_runs.py "${DAGSOLVERS_DIR}" \
+            --finished-only --output "${summary_tmp}"; then
+            mv -f "${summary_tmp}" "${AG_SUMMARY_OUTPUT}"
+        else
+            rm -f "${summary_tmp}"
+        fi
+    }
+
     python3 ./run_experiments.py --multirun --config-name=config-cluster \
-        hydra.sweep.dir="${sweep_dir}" "$@"
-    python3 ./scripts/summarize_ag_runs.py "${DAGSOLVERS_DIR}" \
-        --run-root "${sweep_dir}" --output "${sweep_summary}"
-    python3 ./scripts/merge_ag_summary.py "${sweep_summary}" "${AG_SUMMARY_OUTPUT}"
+        hydra.sweep.dir="${sweep_dir}" "$@" &
+    experiment_pid=$!
+
+    while kill -0 "${experiment_pid}" 2>/dev/null; do
+        refresh_summary
+        sleep 30
+    done &
+    summary_pid=$!
+
+    experiment_status=0
+    wait "${experiment_pid}" || experiment_status=$?
+    kill "${summary_pid}" 2>/dev/null || true
+    wait "${summary_pid}" 2>/dev/null || true
+    refresh_summary
+    return "${experiment_status}"
 }
 
 CMD="run_and_summarize"
@@ -31,33 +52,49 @@ CMD="run_and_summarize"
 max_clique_sizes="5"
 vars="20"
 samples="2000"
-seed="range(1,6)"
-edge_ratios="4"
+seed="range(1,3)"
+edge_ratios="4,5"
 lag_num="0"
 data="cliquefree-er"
 time_limits="1800"
 
 COMMON="problem=${data} problem.p=${lag_num} ++problem.intra_edge_ratio=${edge_ratios} ++problem.inter_edge_ratio=\${problem.intra_edge_ratio} problem.number_of_variables=${vars} problem.number_of_samples=${samples} problem.seed=${seed} ++solver.max_clique_size=${max_clique_sizes} solver.time_limit=${time_limits} solver.experiment_diagnostics=true"
 
-# # 0. Independent historical cliquewidth implementation used as a control.
-# ${CMD} experiment="CLIQUEWIDTH-original_control" ${COMMON} solver=milp_cliquewidth solver.weights_bound=100
+# # A：simultaneous 基线与修正后的 delayed separation hits=1/2/3。
+# ${CMD} experiment="METHOD_A_SIMULTANEOUS_BASELINE" ${COMMON} solver=milp_clique solver.weights_bound=20 solver.enable_cycle_constraints=true solver.enable_clique_constraints=true solver.separation_order=cycle_first solver.delayed_second_separation=false
+# DAGSOLVER_VARIANT=A ${CMD} experiment="METHOD_A_ESCALATION_HITS_1" ${COMMON} solver=delayed_separation solver.weights_bound=20 solver.dense_escalation_hits=1 solver.clique_separation_time_budget=0.02
+# DAGSOLVER_VARIANT=A ${CMD} experiment="METHOD_A_ESCALATION_HITS_2" ${COMMON} solver=delayed_separation solver.weights_bound=20 solver.dense_escalation_hits=2 solver.clique_separation_time_budget=0.02
+# DAGSOLVER_VARIANT=A ${CMD} experiment="METHOD_A_ESCALATION_HITS_3" ${COMMON} solver=delayed_separation solver.weights_bound=20 solver.dense_escalation_hits=3 solver.clique_separation_time_budget=0.02
 
-# # 1. Unified MILP Clique baseline: no A--G enhancement enabled.
-# ${CMD} experiment="CLIQUE" ${COMMON} solver=milp_clique solver.weights_bound=100 solver.clique_cut_formulation=original solver.clique_cut_selection=original solver.enable_delayed_separation=false solver.enable_incumbent_repair=false solver.enable_fractional_separation=false solver.big_m_mode=scalar solver.enable_checkpoints=false
+# B/F：统一的 clique separation 形式与候选选择选项。
+# CLIQUE_SEPERATION_FORMULATION=k_plus_1 CLIQUE_SEPERATION_SELECTION=first CLIQUE_SEPERATION_DEDUP=false ${CMD} experiment="CLIQUE_SEPERATION_K_PLUS_1_FIRST" ${COMMON} solver=clique_separation_options solver.weights_bound=20 solver.max_clique_cuts_per_callback=1
+CLIQUE_SEPERATION_FORMULATION=k_plus_1 CLIQUE_SEPERATION_SELECTION=most_violated CLIQUE_SEPERATION_DEDUP=false ${CMD} experiment="CLIQUE_SEPERATION_K_PLUS_1_MOST_VIOLATED" ${COMMON} solver=clique_separation_options solver.weights_bound=20 solver.max_clique_cuts_per_callback=1
+CLIQUE_SEPERATION_FORMULATION=k_plus_1 CLIQUE_SEPERATION_SELECTION=history CLIQUE_SEPERATION_DEDUP=false ${CMD} experiment="CLIQUE_SEPERATION_K_PLUS_1_HISTORY" ${COMMON} solver=clique_separation_options solver.weights_bound=20 solver.max_clique_cuts_per_callback=1
+CLIQUE_SEPERATION_FORMULATION=k_plus_1 CLIQUE_SEPERATION_SELECTION=top_k_diverse CLIQUE_SEPERATION_TOP_K=5 CLIQUE_SEPERATION_MAX_JACCARD=0.6 CLIQUE_SEPERATION_DEDUP=true ${CMD} experiment="CLIQUE_SEPERATION_K_PLUS_1_TOP_5_DIVERSE" ${COMMON} solver=clique_separation_options solver.weights_bound=20 solver.max_clique_cuts_per_callback=5
+CLIQUE_SEPERATION_FORMULATION=maximal CLIQUE_SEPERATION_SELECTION=all CLIQUE_SEPERATION_DEDUP=true ${CMD} experiment="CLIQUE_SEPERATION_MAXIMAL_ALL" ${COMMON} solver=clique_separation_options solver.weights_bound=20 solver.max_clique_cuts_per_callback=0
 
-# # 2. B1/F2: submit one first minimal (k+1) inequality per callback.
-# ${CMD} experiment="B1-first_min_k+1-F2-first_k+1_cut" ${COMMON} solver=milp_clique solver.weights_bound=20 solver.clique_cut_formulation=k_plus_1 solver.clique_cut_selection=first solver.max_clique_cuts_per_callback=1 solver.deduplicate_clique_cuts=false
+# D：保留无 fractional 基线；重新验证修改后的 root 与 selective non-root separation。
+DAGSOLVER_VARIANT=D1 ${CMD} experiment="METHOD_D1_NO_FRACTIONAL_M20" ${COMMON} solver=fractional_separation solver.weights_bound=20
+DAGSOLVER_VARIANT=D2 ${CMD} experiment="METHOD_D2_ROOT_EXHAUSTIVE_M20" ${COMMON} solver=fractional_separation solver.weights_bound=20 solver.fractional_root_only=true solver.fractional_violation_tolerance=1e-4 solver.fractional_separation_time_budget=0.005
+DAGSOLVER_VARIANT=D3 ${CMD} experiment="METHOD_D3_ROOT_GREEDY_WEIGHTED_M20" ${COMMON} solver=fractional_separation solver.weights_bound=20 solver.fractional_root_only=true solver.fractional_greedy_starts=10 solver.fractional_violation_tolerance=1e-4 solver.fractional_separation_time_budget=0.005
+DAGSOLVER_VARIANT=D4 ${CMD} experiment="METHOD_D4_SELECTIVE_NONROOT_M20" ${COMMON} solver=fractional_separation solver.weights_bound=20 solver.fractional_root_only=false solver.nonroot_separation_frequency=100 solver.nonroot_max_cuts_per_callback=1 solver.fractional_violation_tolerance=1e-4 solver.fractional_separation_time_budget=0.005 solver.fractional_max_zero_rounds=3
+DAGSOLVER_VARIANT=D5 ${CMD} experiment="METHOD_D5_HISTORY_GUIDED_SELECTIVE_M20" ${COMMON} solver=fractional_separation solver.weights_bound=20 solver.fractional_root_only=false solver.dense_history_min_hits=2 solver.nonroot_separation_frequency=50 solver.nonroot_max_cuts_per_callback=1 solver.fractional_violation_tolerance=1e-4 solver.fractional_separation_time_budget=0.005 solver.fractional_max_zero_rounds=3
 
-# # 3. B3: among the minimal (k+1) candidates, submit the most violated one.
-# ${CMD} experiment="B3-most_violated_k+1" ${COMMON} solver=milp_clique solver.weights_bound=20 solver.clique_cut_formulation=k_plus_1 solver.clique_cut_selection=most_violated solver.max_clique_cuts_per_callback=1 solver.deduplicate_clique_cuts=false
+# # E：围绕此前表现最好的 M=20 增加 M=15/25，并保留 edge-specific Mij。
+# ${CMD} experiment="METHOD_E_BIG_M_15" ${COMMON} solver=bigm_relaxation solver.big_m_mode=scalar solver.weights_bound=15
+# ${CMD} experiment="METHOD_E_BIG_M_20" ${COMMON} solver=bigm_relaxation solver.big_m_mode=scalar solver.weights_bound=20
+# ${CMD} experiment="METHOD_E_BIG_M_25" ${COMMON} solver=bigm_relaxation solver.big_m_mode=scalar solver.weights_bound=25
+# ${CMD} experiment="METHOD_E_EDGE_SPECIFIC_MIJ" ${COMMON} solver=bigm_relaxation solver.big_m_mode=edge_specific solver.weights_bound=100 solver.edge_specific_safety_factor=1.01
 
-# 4. C3: greedily repair the support and locally refit changed columns by QR LS.
-${CMD} experiment="C3-local_LS_QR_repair" ${COMMON} solver=milp_clique solver.weights_bound=100 solver.enable_incumbent_repair=true solver.repair_variant=C3 solver.repair_refit_solver=qr
+# # G：单次连续求解并保存完整 checkpoints。
+# DAGSOLVER_VARIANT=G ${CMD} experiment="METHOD_G_CONTINUOUS_CHECKPOINTS" problem="${data}" problem.p="${lag_num}" ++problem.intra_edge_ratio="${edge_ratios}" '++problem.inter_edge_ratio=${problem.intra_edge_ratio}' problem.number_of_variables="${vars}" problem.number_of_samples="${samples}" problem.seed="${seed}" solver=time_limit_optimization ++solver.max_clique_size="${max_clique_sizes}" solver.weights_bound=20 solver.time_limit=7200 solver.checkpoint_times="[5,15,30,60,120,300,600,1000,1200,1800,2700,3600,5400,7200]" solver.experiment_diagnostics=true
 
-# 5. C5: validated violation/loss-aware repair with refit and explicit retries.
-${CMD} experiment="C5-validated_auto_refit_retry" ${COMMON} solver=milp_clique solver.weights_bound=100 solver.enable_incumbent_repair=true solver.repair_variant=C5 solver.repair_refit_solver=auto solver.repair_deletion_score=violation_loss solver.repair_max_retries=2 solver.repair_ridge_alpha=0.001
+# echo "[ALL DONE] Selected and revised A--G experiments completed."
 
-# 6. E2: tighter scalar Big-M; M=20 was the strongest saved Big-M result.
-${CMD} experiment="E2-big_M_20" ${COMMON} solver=milp_clique solver.big_m_mode=scalar solver.weights_bound=100
-
-echo "[ALL DONE] CLIQUEWIDTH control, CLIQUE baseline and five recommended variants completed."
+# C：保留 no-repair 基线、表现较好的 QR/C5，以及修正总预算后的 C6。
+DAGSOLVER_VARIANT=C1 ${CMD} experiment="METHOD_C1_NO_REPAIR" ${COMMON} solver=repair_incumbent solver.weights_bound=20
+DAGSOLVER_VARIANT=C3 ${CMD} experiment="METHOD_C3_LOCAL_LEAST_SQUARES_QR" ${COMMON} solver=repair_incumbent solver.weights_bound=20 solver.repair_refit_solver=qr
+DAGSOLVER_VARIANT=C5 ${CMD} experiment="METHOD_C5_VALIDATED_AUTO_REFIT_RETRY" ${COMMON} solver=repair_incumbent solver.weights_bound=20 solver.repair_refit_solver=auto solver.repair_deletion_score=violation_loss solver.repair_max_retries=2 solver.repair_ridge_alpha=0.001
+cut_cache_dir="${DAGSOLVERS_DIR}/repair_cut_cache"
+DAGSOLVER_VARIANT=C6 ${CMD} experiment="METHOD_C6_BUILD_VALID_CUT_CACHE" ${COMMON} solver=repair_incumbent solver.weights_bound=20 solver.time_limit=180 solver.repair_cut_cache_mode=write solver.repair_cut_cache_dir="${cut_cache_dir}"
+DAGSOLVER_VARIANT=C6 ${CMD} experiment="METHOD_C6_REUSE_VALID_CUT_CACHE" ${COMMON} solver=repair_incumbent solver.weights_bound=20 solver.time_limit=1620 solver.repair_cut_cache_mode=read solver.repair_cut_cache_dir="${cut_cache_dir}"

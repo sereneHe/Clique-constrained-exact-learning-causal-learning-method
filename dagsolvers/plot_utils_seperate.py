@@ -97,34 +97,6 @@ def _env_number_list(name, number_type=int):
     return values or None
 
 
-def _env_method_keys():
-    """Read comma-separated plotting methods, preserving the legacy defaults."""
-    raw = os.getenv('EXDBN_METHOD_KEYS', '').strip()
-    if not raw:
-        return ['milp', 'clique', 'edge_limit']
-    return [item.strip() for item in raw.split(',') if item.strip()]
-
-
-def _method_runtime_prefix(method):
-    """Map a public method key to the runtime CSV filename prefix."""
-    normalized = str(method).strip().lower()
-    if normalized in {'milp', 'exdbn'}:
-        return 'runtime_'
-    if normalized in {'edge_limit', 'edge-limit', 'limit'}:
-        return 'limit_runtime_'
-    return f'{str(method).strip()}_runtime_'
-
-
-def _method_summary_filename(method, scenario_key):
-    """Keep legacy table names while giving every clique variant its own table."""
-    normalized = str(method).strip().lower()
-    if normalized in {'milp', 'exdbn'}:
-        return f'{scenario_key}.csv'
-    if normalized in {'edge_limit', 'edge-limit', 'limit'}:
-        return f'limit_{scenario_key}.csv'
-    return f'{str(method).strip()}_{scenario_key}.csv'
-
-
 def _timelimit_from_filename(path):
     """Read the configured time limit from a runtime filename such as *_1800s_*.csv."""
     match = re.search(r'_(\d+(?:\.\d+)?)s(?:_|\.)', os.path.basename(path))
@@ -154,31 +126,19 @@ def _normalize_legend_style(legend_style=None, default='standard'):
     return aliases.get(raw, raw if raw in {'half_running_time', 'single_data', 'standard'} else default)
 
 
-# def _legend_method_labels(legend_style: str) -> dict[str, str]:
-#     if legend_style == 'half_running_time':
-#         return {
-#             'exdbn': 'EXDBN',
-#             'limit': 'Edge-limit MILP',
-#             'clique': 'Clique-width MILP',
-#         }
-#     return {
-#         'exdbn': 'EXDBN',
-#         'limit': 'Edge-limit MILP',
-#         'clique': 'Clique-width MILP',
-#     }
-
 def _legend_method_labels(legend_style: str) -> dict[str, str]:
+    if legend_style == 'half_running_time':
+        return {
+            'exdbn': 'EXDBN',
+            'limit': 'Edge-limit MILP',
+            'clique': 'Clique-width MILP',
+        }
     return {
-        'milp': 'ExDBN',
-        'exdbn': 'ExDBN',
+        'exdbn': 'EXDBN',
         'limit': 'Edge-limit MILP',
-        'clique': 'Clique',
-        'clique_B1-F2': 'Clique · First k+1',
-        'clique_B3': 'Clique · Most-Violated',
-        'clique_C3': 'Clique · QR Repair',
-        'clique_C5': 'Clique · Auto-Repair',
-        'clique_E2': 'Clique · M=20',
+        'clique': 'Clique-width MILP',
     }
+
 
 def _legend_layout_config(num_labels, legend_style=None, position_override=None, single_scenario_mode=False):
     """
@@ -456,9 +416,13 @@ def _discover_runtime_scenarios(base_dir='results/exdbn/exdbn_run', modes=('stat
         'clique_runtime_': {...},
       }
     """
-    discovered = {}
+    discovered = {
+        'runtime_': {m: set() for m in modes},
+        'limit_runtime_': {m: set() for m in modes},
+        'clique_runtime_': {m: set() for m in modes},
+    }
     pattern = re.compile(
-        r'^(?P<prefix>(?:[A-Za-z0-9-]+_)*runtime_)'
+        r'^(?P<prefix>limit_runtime_|clique_runtime_|runtime_)'
         r'(?P<mode>static|dynamic)_'
         r'(?P<scenario>[A-Za-z0-9-]+)_[A-Za-z0-9]+_d\d+_n\d+(?:_.*)?\.csv$'
     )
@@ -471,8 +435,6 @@ def _discover_runtime_scenarios(base_dir='results/exdbn/exdbn_run', modes=('stat
             prefix = m.group('prefix')
             mode = m.group('mode')
             scenario = m.group('scenario')
-            if prefix not in discovered:
-                discovered[prefix] = {available_mode: set() for available_mode in modes}
             if mode in discovered[prefix]:
                 discovered[prefix][mode].add(scenario)
     return discovered
@@ -482,7 +444,6 @@ def generate_all_runtime_summary_tables(
     base_dir='results/exdbn/exdbn_run',
     modes=('static',),
     plateau_by_f1=None,
-    method_keys=None,
 ):
     """
     Generate all summary CSV tables to base_dir:
@@ -500,22 +461,12 @@ def generate_all_runtime_summary_tables(
         'limit_runtime_': lambda s: f'limit_{s}.csv',
         'clique_runtime_': lambda s: f'clique_{s}.csv',
     }
-    requested_prefixes = None
-    if method_keys:
-        requested_prefixes = {_method_runtime_prefix(method) for method in method_keys}
 
     for runtime_prefix, mode_map in discovered.items():
-        if requested_prefixes is not None and runtime_prefix not in requested_prefixes:
-            continue
         for mode in modes:
             scenario_keys = sorted(mode_map.get(mode, set()))
             for scenario_key in scenario_keys:
-                output_filename = prefix_to_output.get(
-                    runtime_prefix,
-                    lambda s, prefix=runtime_prefix: (
-                        f'{prefix.removesuffix("runtime_").rstrip("_")}_{s}.csv'
-                    ),
-                )(scenario_key)
+                output_filename = prefix_to_output[runtime_prefix](scenario_key)
                 output_path, _ = generate_runtime_summary_csv(
                     base_dir=base_dir,
                     scenario_key=scenario_key,
@@ -546,8 +497,6 @@ def make_grid_problem_samples_plot(
     method_name_callback=None,
     append_metric_suffix=True,
     row_order=None,
-    row_y_limits=None,
-    independent_y_axes=False,
     legend_style=None,
     legend_position=None,
     single_scenario_mode=False,
@@ -627,10 +576,6 @@ def make_grid_problem_samples_plot(
         relplot_kwargs['row_order'] = row_order
     if col_name:
         relplot_kwargs['col'] = col_name
-    # A facet-specific y-limit requires independent y-axes.  This is used for
-    # the low-range SF-5 SHD row without constraining the ER rows.
-    if row_y_limits or independent_y_axes:
-        relplot_kwargs['facet_kws'] = {'sharey': False}
 
     pic = sns.relplot(**relplot_kwargs)
 
@@ -669,9 +614,7 @@ def make_grid_problem_samples_plot(
             get_solver_columns_names(group_data) + ['Method']
         )
 
-        if row_y_limits and row_val in row_y_limits:
-            ax.set_ylim(*row_y_limits[row_val])
-        elif y_lim is not None:
+        if y_lim is not None:
             ax.set_ylim(ymax=y_lim)
 
         ax_handles, ax_labels = axes[0, 0].get_legend_handles_labels()
@@ -737,7 +680,7 @@ def make_grid_problem_samples_plot(
 
     if single_scenario_mode and len(pic.row_names) == 1:
         pic.figure.text(
-            x=0.055, y=0.5,
+            x=0.02, y=0.5,
             s=label,
             ha='center',
             va='center',
@@ -746,7 +689,7 @@ def make_grid_problem_samples_plot(
         )
     else:
         pic.figure.text(
-            x=0.85, y=0.5,
+            x=0.94, y=0.5,
             s=label,
             ha='center',
             va='center',
@@ -754,17 +697,13 @@ def make_grid_problem_samples_plot(
             fontsize=font_size + 4
         )
 
-        row_label_side = os.getenv('EXDBN_ROW_LABEL_SIDE', 'left').strip().lower()
         for i, row_name in enumerate(pic.row_names):
-            # Place right-side row labels past the right-most facet, where
-            # they remain distinct from the shared metric label and legend.
-            row_axis = pic.axes[i, -1] if row_label_side == 'right' else pic.axes[i, 0]
-            row_axis.annotate(
+            pic.axes[i, 0].annotate(
                 text=row_name,
-                xy=(1.12 if row_label_side == 'right' else -0.2, 0.0 if row_label_side == 'right' else 0.5),
+                xy=(-0.2, 0.5),
                 xycoords='axes fraction',
                 ha='center',
-                va='bottom' if row_label_side == 'right' else 'center',
+                va='center',
                 fontsize=font_size,
                 rotation=90
             )
@@ -786,15 +725,7 @@ def make_grid_problem_samples_plot(
         pic.set(xticks=list(range(min_number_vars, max_number_vars + 1, 5)))
 
     figure = pic.figure
-    # A selected method can be absent from the first facet.  Merge handles
-    # from all facets so the shared legend still represents every method.
-    legend_entries = {}
-    for ax in pic.axes.flatten():
-        ax_handles, ax_labels = ax.get_legend_handles_labels()
-        for handle, label_text in zip(ax_handles, ax_labels):
-            legend_entries.setdefault(label_text, handle)
-    labels = list(legend_entries)
-    handles = [legend_entries[label_text] for label_text in labels]
+    handles, labels = pic.axes[0][0].get_legend_handles_labels()
     legend_cfg = _legend_layout_config(
         len(labels),
         legend_style=legend_style,
@@ -868,11 +799,7 @@ def make_grid_problem_samples_plot(
     else:
         filename = f'{outputfile}.png'
 
-    formats = [item.strip().lower().lstrip('.') for item in os.getenv('EXDBN_PLOT_FORMATS', 'png').split(',') if item.strip()]
-    dpi = int(os.getenv('EXDBN_PLOT_DPI', '300'))
-    stem = os.path.splitext(filename)[0]
-    for image_format in dict.fromkeys(formats):
-        figure.savefig(join(output_dir, f'{stem}.{image_format}'), bbox_inches='tight', dpi=dpi)
+    figure.savefig(join(output_dir, filename), bbox_inches='tight', dpi=300)
     plt.close(figure)
 
 
@@ -1060,7 +987,6 @@ def plot_three_method_tables_as_three_figures(
     x_axis='nodes',
     features=None,
     timelimits=None,
-    method_keys=None,
 ):
     """
     Reuse existing grid plotting logic and output three figures:
@@ -1086,13 +1012,13 @@ def plot_three_method_tables_as_three_figures(
     else:
         single_scenario_mode = len(scenario_keys) == 1
 
-    method_keys = method_keys or ['milp', 'clique', 'edge_limit']
     dfs = []
     scenario_method_presence = {k: set() for k in scenario_keys}
     for scenario_key in scenario_keys:
         table_specs = [
-            (os.path.join(base_dir, _method_summary_filename(method, scenario_key)), method)
-            for method in method_keys
+            (os.path.join(base_dir, f'{scenario_key}.csv'), 'exdbn'),
+            (os.path.join(base_dir, f'limit_{scenario_key}.csv'), 'limit'),
+            (os.path.join(base_dir, f'clique_{scenario_key}.csv'), 'clique'),
         ]
         for path, method_name in table_specs:
             if not os.path.exists(path):
@@ -1145,7 +1071,7 @@ def plot_three_method_tables_as_three_figures(
         methods = scenario_method_presence.get(s, set())
         if methods:
             valid_scenarios.append(s)
-            missing = set(method_keys) - methods
+            missing = {'exdbn', 'limit', 'clique'} - methods
             if missing:
                 print(f'[PLOT] scenario={s} missing methods={sorted(missing)}, plotting available={sorted(methods)}')
     row_order = []
@@ -1209,8 +1135,6 @@ def plot_three_method_tables_as_three_figures(
         problem_name_callback = _runtime_dataset_label
 
     output_paths = []
-    sf_shd_ymax_text = os.getenv('EXDBN_SF_SHD_YMAX', '').strip()
-    sf_shd_ymax = float(sf_shd_ymax_text) if sf_shd_ymax_text else None
     for metric in y_metrics:
         mean_col = f'{metric}_mean'
         if mean_col not in data.columns:
@@ -1233,12 +1157,6 @@ def plot_three_method_tables_as_three_figures(
             method_name_callback=method_name_callback,
             append_metric_suffix=False,
             row_order=row_order,
-            # When an explicit SF limit is not requested, SHD panels retain
-            # independent, data-driven y-ranges rather than sharing the ER range.
-            row_y_limits=({'cliquefree-sf-5-0': (0.0, sf_shd_ymax)}
-                          if metric == 'shd' and sf_shd_ymax is not None and not timelimit_axis
-                          else None),
-            independent_y_axes=(metric == 'shd' and not timelimit_axis),
             legend_style=legend_style,
             legend_position=legend_position,
             single_scenario_mode=single_scenario_mode,
@@ -1284,7 +1202,6 @@ if __name__ == "__main__":
     x_axis = os.getenv('EXDBN_X_AXIS', 'nodes').strip().lower()
     summary_modes = os.getenv('EXDBN_SUMMARY_MODES', 'static')
     y_axis = os.getenv('EXDBN_Y_AXIS', 'runtime_seconds/f1score/shd')
-    method_keys = _env_method_keys()
     features = _env_number_list('EXDBN_FEATURES', int)
     timelimits = _env_number_list('EXDBN_TIMELIMITS', float)
     project_dir = os.path.dirname(os.path.abspath(__file__))
@@ -1310,11 +1227,7 @@ if __name__ == "__main__":
         )
 
     if generate_summaries:
-        generated = generate_all_runtime_summary_tables(
-            base_dir=base_dir,
-            modes=modes,
-            method_keys=method_keys,
-        )
+        generated = generate_all_runtime_summary_tables(base_dir=base_dir, modes=modes)
         if generated:
             print(f'Generated {len(generated)} summary tables under {base_dir}')
         else:
@@ -1340,7 +1253,6 @@ if __name__ == "__main__":
         x_axis=x_axis,
         features=features,
         timelimits=timelimits,
-        method_keys=method_keys,
     )
     for path in output_paths:
         print(f'Figure saved to {path}')

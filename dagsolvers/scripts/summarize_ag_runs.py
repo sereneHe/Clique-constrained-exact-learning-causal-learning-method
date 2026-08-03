@@ -36,14 +36,15 @@ STATUS_NAMES = {
 AG_EXPERIMENT_RE = re.compile(r"^METHOD_(?P<family>[A-G])(?:\d+)?(?:_|$)")
 
 AG_OUTPUT_COLUMNS = [
-    "method", "dataset", "features", "samples", "p", "edge_ratio", "degree",
+    "method_variant", "experiment", "dataset", "features", "samples", "p",
+    "edge_ratio", "degree",
     "ori_graph_density", "after_cliquefree_density", "true_linear_r2",
     "big_m", "runtime_seconds", "gap", "shd", "f1score",
     "cycle_lazy_cuts", "clique_lazy_cuts", "clique_user_cuts",
     "cycle_unique_cuts", "clique_unique_cuts", "cycle_duplicate_cuts",
     "clique_duplicate_cuts", "unique_cuts", "duplicate_cuts", "cut_hit_pct",
-    "status", "experiment", "method_family", "method_variant", "seed",
-    "time_limit", "true_edges", "true_mean_abs_w", "best_incumbent",
+    "status", "method_family", "seed", "time_limit", "true_edges",
+    "true_mean_abs_w", "best_incumbent",
     "best_bound", "root_bound", "bound_gain", "explored_nodes", "open_nodes",
     "nodes_per_s", "solution_count", "g_score", "nnz", "fdr", "tpr", "fpr",
     "precision", "mipsol_total", "mipsol_rejected", "mipsol_accepted",
@@ -65,22 +66,6 @@ AG_OUTPUT_COLUMNS = [
     "best_incumbent_edges", "best_incumbent_weights", "W_true_path", "run_dir",
 ]
 
-COMPACT_OUTPUT_COLUMNS = [
-    "method", "dataset", "features", "samples", "p", "edge_ratio", "degree",
-    "ori_graph_density", "after_cliquefree_density", "true_linear_r2", "big_m",
-    "runtime_seconds", "gap", "fdr", "tpr", "fpr", "shd", "nnz",
-    "precision", "f1score", "g_score", "lazy_count",
-    "cycle_lazy_count", "clique_lazy_count", "clique_user_count",
-]
-
-CLIQUE_METHOD_LABELS = {
-    "B1-first_min_k+1-F2-first_k+1_cut": "clique-B1-F2",
-    "B3-most_violated_k+1": "clique-B3",
-    "C3-local_LS_QR_repair": "clique-C3",
-    "C5-validated_auto_refit_retry": "clique-C5",
-    "E2-big_M_20": "clique-E2",
-}
-
 
 def experiment_family(experiment: str) -> str | None:
     match = AG_EXPERIMENT_RE.match(experiment)
@@ -92,17 +77,6 @@ def experiment_family(experiment: str) -> str | None:
         return "B/F"
     if experiment.startswith("CALLBACK_1800_"):
         return "CALLBACK"
-    unified_names = {
-        "CLIQUEWIDTH-original_control": "CONTROL",
-        "CLIQUE": "BASE",
-        "B1-first_min_k+1-F2-first_k+1_cut": "B/F",
-        "B3-most_violated_k+1": "B",
-        "C3-local_LS_QR_repair": "C",
-        "C5-validated_auto_refit_retry": "C",
-        "E2-big_M_20": "E",
-    }
-    if experiment in unified_names:
-        return unified_names[experiment]
     return None
 
 
@@ -808,13 +782,7 @@ def build_rows(
             normalized_number(nested_get(config, "problem.number_of_variables")),
         )
         row: dict[str, Any] = {
-            "_experiment_diagnostics": bool(first_present(
-                nested_get(config, "solver.experiment_diagnostics"),
-                nested_get(config, "solver.optimization_diagnostics"),
-                False,
-            )),
             "status": STATUS_NAMES.get(status_code, str(status_code or "")),
-            "method": CLIQUE_METHOD_LABELS.get(experiment, experiment),
             "method_family": family,
             "dataset": first_present(
                 nested_get(config, "problem.name"), params.get("problem.name")
@@ -930,13 +898,6 @@ def build_rows(
             "cycle_cuts": cycle_added,
             "clique_cuts": clique_added,
             "user_cuts": user_cuts,
-            "lazy_count": as_float(first_present(
-                metrics.get("lazy_added"),
-                sum(value for value in (cycle_added, clique_added)
-                    if value is not None),
-            )),
-            "cycle_lazy_count": cycle_added,
-            "clique_lazy_count": clique_added,
             "clique_user_count": user_cuts,
             "total_cuts": sum(
                 value for value in (cycle_added, clique_added, user_cuts)
@@ -1063,11 +1024,7 @@ def build_rows(
 def write_csv(rows: list[dict[str, Any]], output: Path) -> None:
     if not rows:
         raise SystemExit("No A--G MLflow runs found")
-    fields = (
-        AG_OUTPUT_COLUMNS
-        if any(bool(row.get("_experiment_diagnostics")) for row in rows)
-        else COMPACT_OUTPUT_COLUMNS
-    )
+    fields = AG_OUTPUT_COLUMNS
     aliases = {
         "features": "number_of_variables",
         "samples": "number_of_samples",
@@ -1091,8 +1048,6 @@ def write_csv(rows: list[dict[str, Any]], output: Path) -> None:
         "root_fractional_edges", "root_small_x_large_w",
         "root_violated_cliques", "cycle_lazy_cuts", "clique_lazy_cuts",
         "clique_user_cuts", "unique_cuts", "duplicate_cuts", "shd", "nnz",
-        "lazy_count", "cycle_lazy_count", "clique_lazy_count",
-        "clique_user_count",
         "cycle_unique_cuts", "clique_unique_cuts",
         "cycle_duplicate_cuts", "clique_duplicate_cuts",
         "open_nodes", "solution_count",
@@ -1107,8 +1062,7 @@ def write_csv(rows: list[dict[str, Any]], output: Path) -> None:
     six_decimal_fields = {
         "best_incumbent", "best_bound", "gap", "gap_pct", "root_bound",
         "dual_gain_per_cut", "dual_gain_per_s", "f1score", "g_score",
-        "true_mean_abs_w", "true_linear_r2", "big_m", "bound_gain",
-        "bound_gain_per_1k_nodes",
+        "true_mean_abs_w", "big_m", "bound_gain", "bound_gain_per_1k_nodes",
         "root_max_clique_violation",
         "root_mean_big_m_ratio",
     }
@@ -1162,6 +1116,11 @@ def main() -> None:
         action="store_true",
         help="return a non-zero exit code when matches/data are incomplete",
     )
+    parser.add_argument(
+        "--finished-only",
+        action="store_true",
+        help="only include MLflow runs whose status is FINISHED",
+    )
     args = parser.parse_args()
 
     all_rows: list[dict[str, Any]] = []
@@ -1171,6 +1130,12 @@ def main() -> None:
             rows, warnings = build_rows(dagsolvers_root, args.experiment_prefix)
             all_rows.extend(rows)
             all_warnings.extend(warnings)
+
+    if args.finished_only:
+        all_rows = [
+            row for row in all_rows
+            if str(row.get("status", "")).upper() == "FINISHED"
+        ]
 
     all_rows.sort(
         key=lambda row: (

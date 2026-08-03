@@ -36,30 +36,18 @@ METRIC_LABELS = {
     "runtime_seconds": "Runtime",
     "lazy_count": "Lazy constraints",
     "best_shd": "Best SHD",
-    "shd": "SHD",
-    "gap": "Gap",
-    "f1score": "F1 score",
 }
 
 BASE_SOLVER_ORDER = ("milp", "milp_clique", "edge_limit", "edge_limit_mean")
 SOLVER_LABELS = {
     "milp": "MILP",
-    "milp_clique": "Clique",
-    "clique_b1-f2": "Clique · First k+1",
-    "clique_b3": "Clique · Most-Violated",
-    "clique_c3": "Clique · QR Repair",
-    "clique_e2": "Clique · M=20",
+    "milp_clique": "Clique Width",
     "edge_limit": "Edge Limit",
     "edge_limit_mean": "Edge Limit Mean",
 }
 SOLVER_COLORS = {
-    # Keep the six-method palette identical to plot_utils_seperate.py.
-    "milp": "#1f77b4",
-    "milp_clique": "#ff7f0e",
-    "clique_b1-f2": "#2ca02c",
-    "clique_b3": "#d62728",
-    "clique_c3": "#9467bd",
-    "clique_e2": "#8c564b",
+    "milp": "#ff7f0e",
+    "milp_clique": "#1f77b4",
     "edge_limit": "#2ca02c",
     "edge_limit_mean": "#2ca02c",
 }
@@ -70,26 +58,6 @@ SOLVER_LINESTYLES = {
     "edge_limit_mean": "-",
 }
 PROFILE_EPSILON = 1e-9
-
-
-def solver_key_from_table_name(name: str) -> str | None:
-    """Return the plotting method key encoded in a static-runtime table."""
-    if name.startswith("runtime_static_"):
-        return "milp"
-    if name.startswith("clique_runtime_static_"):
-        return "milp_clique"
-    if name.startswith("limit_runtime_static_"):
-        return "edge_limit"
-    match = re.match(r"^(clique_[^_]+)_runtime_static_", name)
-    return match.group(1).lower() if match else None
-
-
-def solver_label(solver_key: str) -> str:
-    if solver_key in SOLVER_LABELS:
-        return SOLVER_LABELS[solver_key]
-    if solver_key.startswith("clique_"):
-        return solver_key.removeprefix("clique_").replace("-", " ").upper()
-    return solver_key
 
 
 def time_limit_solver_key(name: str) -> str | None:
@@ -513,7 +481,11 @@ def iter_solver_table_csvs(table_dir: Path):
     for search_dir in search_dirs:
         for csv_path in sorted(search_dir.glob("*.csv")):
             name = csv_path.name
-            if solver_key_from_table_name(name) is not None:
+            if (
+                name.startswith("runtime_static_")
+                or name.startswith("clique_runtime_static_")
+                or name.startswith("limit_runtime_static_")
+            ):
                 yield csv_path
 
 
@@ -523,14 +495,12 @@ def collect_rows_from_table_dir(
     scenario_key: str | None = None,
     include_edge_limit: bool = True,
     include_edge_limit_mean: bool = True,
-    selected_solvers: set[str] | None = None,
 ) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for csv_path in iter_solver_table_csvs(table_dir):
-        solver = solver_key_from_table_name(csv_path.name)
+        solver_prefix = csv_path.name.split("_", 1)[0]
+        solver = PROFILE_SOLVERS.get(solver_prefix)
         if solver is None:
-            continue
-        if selected_solvers is not None and solver not in selected_solvers:
             continue
         with csv_path.open(newline="") as handle:
             reader = list(csv.DictReader(handle))
@@ -544,7 +514,7 @@ def collect_rows_from_table_dir(
                     mean_row = dict(reader[-1])
                     mean_row["seed"] = "0"
                     mean_row["degree"] = "0"
-                    for metric_key in ("runtime_seconds", "gap", "shd", "lazy_count", "f1score"):
+                    for metric_key in ("runtime_seconds", "gap", "shd", "lazy_count"):
                         mean_row[metric_key] = mean_metric_from_rows(reader, metric_key)
                     selected_rows.append((mean_row, "edge_limit_mean"))
         else:
@@ -565,7 +535,6 @@ def collect_rows_from_table_dir(
             gap = first_present(row, ("gap",))
             shd = first_present(row, ("shd",))
             lazy_count = first_present(row, ("lazy_count",))
-            f1score = first_present(row, ("f1score", "f1"))
             status = first_present(row, ("status",)) or "ok"
             rows.append(
                 {
@@ -580,7 +549,6 @@ def collect_rows_from_table_dir(
                     "shd": shd,
                     "gap": gap,
                     "lazy_count": lazy_count,
-                    "f1score": f1score,
                 }
             )
     if not rows:
@@ -1273,12 +1241,12 @@ def export_profile_data(
         writer = csv.writer(io)
         writer.writerow(["metric", "solver_label", "solver_key", "x", "y", "max_ratio", "logscale", "mean_over_seeds"])
         for solver_idx, solver_key in enumerate(solver_order):
-            label = solver_label(solver_key)
+            solver_label = SOLVER_LABELS[solver_key]
             for x, y in zip(x_values[solver_idx], y_values[solver_idx], strict=True):
                 writer.writerow(
                     [
                         metric,
-                        label,
+                        solver_label,
                         solver_key,
                         x,
                         y,
@@ -1304,7 +1272,6 @@ def plot_profile(data_csv: Path, output_png: Path) -> None:
         labels[row["solver_key"]] = row["solver_label"]
 
     solver_order = tuple(solver for solver in BASE_SOLVER_ORDER if solver in grouped)
-    solver_order += tuple(solver for solver in sorted(grouped) if solver not in BASE_SOLVER_ORDER)
 
     fig, ax = plt.subplots(figsize=(8, 5))
     max_x = 0.0
@@ -1340,8 +1307,5 @@ def plot_profile(data_csv: Path, output_png: Path) -> None:
     ax.legend(loc="lower right")
     fig.tight_layout()
     output_png.parent.mkdir(parents=True, exist_ok=True)
-    dpi = int(os.getenv("EXDBN_PLOT_DPI", "200"))
-    formats = [item.strip().lower().lstrip(".") for item in os.getenv("EXDBN_PLOT_FORMATS", "png").split(",") if item.strip()]
-    for image_format in dict.fromkeys(formats):
-        fig.savefig(output_png.with_suffix(f".{image_format}"), dpi=dpi)
+    fig.savefig(output_png, dpi=200)
     plt.close(fig)

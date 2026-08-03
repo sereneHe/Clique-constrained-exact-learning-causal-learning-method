@@ -30,13 +30,12 @@ CMD="run_and_summarize"
 max_clique_sizes="5"
 vars="20"
 samples="2000"
-seed="range(1,3)"
-edge_ratios="4"
-#edge_ratios="5"
+seed="range(1,5)"
+edge_ratios="5"
 lag_num="0"
 data="cliquefree-er"
 time_limits="1800"
-solvers="milp_cliquewidth"
+solvers="milp_clique"
 
 
 # ${CMD} experiment="CALLBACK_1800_CYCLE_ONLY" problem="${data}" problem.p="${lag_num}" ++problem.intra_edge_ratio="${edge_ratios}" ++problem.inter_edge_ratio="${edge_ratios}" problem.number_of_variables="${vars}" problem.number_of_samples="${samples}" problem.seed="${seed}" solver="${solvers}" ++solver.max_clique_size="${max_clique_sizes}" solver.time_limit="${time_limits}" solver.experiment_diagnostics=true ++solver.print_callback_events=true ++solver.print_retained_solutions=true solver.print_clique_cuts=true solver.enable_cycle_constraints=true solver.enable_clique_constraints=false
