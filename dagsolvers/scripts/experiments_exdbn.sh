@@ -15,7 +15,7 @@ time_limits="1800"
 # max_clique_sizes="3,5,7,9"
 # time_limits="30,60,120,180,300,600,1200,1800"
 
-${CMD} experiment="EXDBN2_CLIQUE" solver="milp,milp_clique,edge_limit" problem="cliquefree-er" problem.normalize="false" problem.p="${lag_num}"  ++problem.intra_edge_ratio="${edge_ratios}" ++problem.inter_edge_ratio="${edge_ratios}" ++problem.w_min_inter="0.2" ++problem.w_max_inter="0.4" ++problem.w_min_intra="0.5" ++problem.w_max_intra="2" ++problem.w_decay="1.1" problem.number_of_variables="${vars}" problem.number_of_samples="${samples}" problem.seed="range(1,${num_seeds})" ++solver.max_clique_size="${max_clique_sizes}" solver.time_limit="${time_limits}"
+${CMD} experiment="EXDBN2_CLIQUE" solver="milp,milp_cliquewidth,edge_limit" problem="cliquefree-er" problem.normalize="false" problem.p="${lag_num}"  ++problem.intra_edge_ratio="${edge_ratios}" ++problem.inter_edge_ratio="${edge_ratios}" ++problem.w_min_inter="0.2" ++problem.w_max_inter="0.4" ++problem.w_min_intra="0.5" ++problem.w_max_intra="2" ++problem.w_decay="1.1" problem.number_of_variables="${vars}" problem.number_of_samples="${samples}" problem.seed="range(1,${num_seeds})" ++solver.max_clique_size="${max_clique_sizes}" solver.time_limit="${time_limits}"
 
 # edge_ratios="2"
 # lag_num="1"

@@ -40,7 +40,6 @@ from dagsolvers import (
     solve_exmag,
     solve_gobnilp,
     solve_milp,
-    solve_milp_clique,
     solve_milp_cliquewidth,
     solve_milp_edge_limit,
 )
@@ -56,7 +55,7 @@ DEFAULT_MULTIRUN_ROOT = PROJECT_DIR / 'multirun'
 
 
 STATIC_RUNTIME_COLUMNS = [
-    'method', 'method_variant', 'experiment',
+    'method_variant', 'experiment',
     'dataset', 'features', 'samples', 'p', 'edge_ratio', 'degree',
     'ori_graph_density', 'after_cliquefree_density', 'true_linear_r2',
     'big_m', 'runtime_seconds', 'gap', 'shd', 'f1score',
@@ -86,25 +85,8 @@ STATIC_RUNTIME_COLUMNS = [
     'best_incumbent_edges', 'best_incumbent_weights', 'W_true_path', 'run_dir',
 ]
 
-COMPACT_RUNTIME_COLUMNS = [
-    'method', 'dataset', 'features', 'samples', 'p', 'edge_ratio', 'degree',
-    'ori_graph_density', 'after_cliquefree_density', 'true_linear_r2', 'big_m',
-    'runtime_seconds', 'gap', 'fdr', 'tpr', 'fpr', 'shd', 'nnz',
-    'precision', 'f1score', 'g_score', 'lazy_count',
-    'cycle_lazy_count', 'clique_lazy_count', 'clique_user_count',
-]
-
 CLIQUE_FAMILY_SOLVERS = {
-    'milp_clique',
-    'milp_cliquewidth',
-}
-
-CLIQUE_EXPERIMENT_FILE_LABELS = {
-    'B1-first_min_k+1-F2-first_k+1_cut': 'B1-F2',
-    'B3-most_violated_k+1': 'B3',
-    'C3-local_LS_QR_repair': 'C3',
-    'C5-validated_auto_refit_retry': 'C5',
-    'E2-big_M_20': 'E2',
+    'cliquewidth',
 }
 
 
@@ -112,16 +94,12 @@ def _env_flag(name):
     return os.getenv(name, '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-def _static_runtime_prefix(cfg):
-    solver_name = str(cfg.solver.name)
+def _static_runtime_prefix(solver_name):
     if solver_name == 'milp':
         return 'runtime_'
     if solver_name == 'dagma':
         return 'dagma_runtime_'
     if solver_name in CLIQUE_FAMILY_SOLVERS:
-        case_label = CLIQUE_EXPERIMENT_FILE_LABELS.get(str(cfg.experiment))
-        if case_label:
-            return f'clique_{case_label}_runtime_'
         return 'clique_runtime_'
     if solver_name == 'edge_limit':
         return 'limit_runtime_'
@@ -178,23 +156,20 @@ def _static_solver_suffix(cfg):
     return f'{time_limit}s_{max_clique_size}clique'
 
 
-def _ensure_static_runtime_columns(path, target_columns):
+def _ensure_static_runtime_columns(path):
     if not path.exists():
         return
     with path.open(newline='') as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []
         rows = list(reader)
-    if fieldnames == target_columns:
+    if fieldnames == STATIC_RUNTIME_COLUMNS:
         return
     legacy_aliases = {
         'dataset': 'experiment', 'degree': 'seed', 'features': 'number_of_variables',
         'samples': 'number_of_samples', 'runtime_seconds': 'runtime_s',
         'f1score': 'f1', 'cycle_lazy_cuts': 'cycle_cuts',
         'clique_lazy_cuts': 'clique_cuts', 'clique_user_cuts': 'user_cuts',
-        'cycle_lazy_count': 'cycle_lazy_cuts',
-        'clique_lazy_count': 'clique_lazy_cuts',
-        'clique_user_count': 'clique_user_cuts',
         'explored_nodes': 'nodes', 'mipsol_rejection_pct': 'rejection_pct',
         'root_fractional_x_bins': 'root_x_bins',
         'ori_graph_density': 'ori_skeleton_density',
@@ -202,21 +177,13 @@ def _ensure_static_runtime_columns(path, target_columns):
     }
     migrated_rows = []
     for old_row in rows:
-        row = {column: old_row.get(column, '') for column in target_columns}
+        row = {column: old_row.get(column, '') for column in STATIC_RUNTIME_COLUMNS}
         for new_column, old_column in legacy_aliases.items():
-            if new_column in target_columns and not row.get(new_column):
+            if not row.get(new_column):
                 row[new_column] = old_row.get(old_column, '')
-        if 'lazy_count' in target_columns and not row.get('lazy_count'):
-            try:
-                row['lazy_count'] = str(
-                    int(float(row.get('cycle_lazy_count') or 0))
-                    + int(float(row.get('clique_lazy_count') or 0))
-                )
-            except (TypeError, ValueError):
-                row['lazy_count'] = ''
         migrated_rows.append(row)
     with path.open('w', newline='') as handle:
-        writer = csv.DictWriter(handle, fieldnames=target_columns)
+        writer = csv.DictWriter(handle, fieldnames=STATIC_RUNTIME_COLUMNS)
         writer.writeheader()
         writer.writerows(migrated_rows)
 
@@ -322,7 +289,7 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
         return
 
     run_output_dir = Path(output_dir)
-    prefix = _static_runtime_prefix(cfg)
+    prefix = _static_runtime_prefix(cfg.solver.name)
     scenario_key = _static_scenario_key(cfg)
     if prefix is None or scenario_key is None:
         return
@@ -339,14 +306,7 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
     solver_suffix = _static_solver_suffix(cfg)
     output_path = output_dir / f'{prefix}{dataset}_{solver_suffix}.csv'
 
-    diagnostics_enabled = bool(cfg.solver.get(
-        'experiment_diagnostics',
-        cfg.solver.get('optimization_diagnostics', False),
-    ))
-    output_columns = (
-        STATIC_RUNTIME_COLUMNS if diagnostics_enabled else COMPACT_RUNTIME_COLUMNS
-    )
-    _ensure_static_runtime_columns(output_path, output_columns)
+    _ensure_static_runtime_columns(output_path)
     diagnostics = _read_ag_diagnostics(run_output_dir)
     final = diagnostics.get('final', {})
     derived = diagnostics.get('derived_metrics', {})
@@ -375,21 +335,14 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
     d = int(cfg.problem.number_of_variables)
     experiment = str(cfg.experiment)
     method_match = re.match(r'^METHOD_([A-G])', experiment)
-    case_label = CLIQUE_EXPERIMENT_FILE_LABELS.get(experiment)
     row = {
-        'method': (
-            f'clique-{case_label}'
-            if str(cfg.solver.name) in CLIQUE_FAMILY_SOLVERS and case_label
-            else str(cfg.solver.name)
-        ),
         'dataset': dataset,
         'features': features,
         'samples': samples,
         'p': _static_problem_p_value(cfg),
         'status': 'FINISHED',
         'method_family': method_match.group(1) if method_match else '',
-        'method_variant': cfg.solver.get(
-            'experiment_variant', cfg.solver.get('method_variant', '')),
+        'method_variant': cfg.solver.get('method_variant', ''),
         'experiment': experiment,
         'edge_ratio': cfg.problem.get('intra_edge_ratio', cfg.problem.get('edge_ratio')),
         'seed': cfg.problem.get('seed'),
@@ -448,10 +401,6 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
         'cycle_lazy_cuts': cycle_cuts,
         'clique_lazy_cuts': clique_cuts,
         'clique_user_cuts': user_cuts,
-        'lazy_count': lazy_count,
-        'cycle_lazy_count': cycle_cuts,
-        'clique_lazy_count': clique_cuts,
-        'clique_user_count': user_cuts,
         'unique_cuts': sum(cut_unique.get(kind, 0) for kind in ('cycle', 'clique')),
         'duplicate_cuts': sum(cut_duplicates.get(kind, 0) for kind in ('cycle', 'clique')),
         'cycle_unique_cuts': cut_unique.get('cycle'),
@@ -507,9 +456,7 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
     }
     write_header = not output_path.exists()
     with output_path.open('a', newline='') as handle:
-        writer = csv.DictWriter(
-            handle, fieldnames=output_columns, extrasaction='ignore'
-        )
+        writer = csv.DictWriter(handle, fieldnames=STATIC_RUNTIME_COLUMNS)
         if write_header:
             writer.writeheader()
         writer.writerow(row)
@@ -695,11 +642,7 @@ def start_experiment(cfg: DictConfig) -> None:
                 if degree_value is not None:
                     solve_kwargs["max_in_degree"] = degree_value
                     solve_kwargs["max_out_degree"] = degree_value
-            elif cfg.solver.name == 'milp_clique':
-                solve_fn = solve_milp_clique.solve
-                with open_dict(cfg.solver):
-                    cfg.solver.diagnostics_output_dir = output_dir
-            elif cfg.solver.name == 'milp_cliquewidth':
+            elif cfg.solver.name == 'cliquewidth':
                 solve_fn = solve_milp_cliquewidth.solve
 
             solve_result = solve_fn(**solve_kwargs)

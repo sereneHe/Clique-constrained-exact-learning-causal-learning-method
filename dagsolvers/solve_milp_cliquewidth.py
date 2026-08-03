@@ -349,12 +349,14 @@ def solve(X, cfg: DictConfig, w_threshold, Y=None, B_ref=None, tabu_edges=None):
             return None, None, None, None, None, {
                 "cycle_lazy_count": m._cycle_lazy_count,
                 "clique_lazy_count": m._clique_lazy_count,
+                "clique_user_count": 0,
             }
         gap = m.MIPGap
         lazy_count = m._lazy_count
         lazy_breakdown = {
             "cycle_lazy_count": m._cycle_lazy_count,
             "clique_lazy_count": m._clique_lazy_count,
+            "clique_user_count": 0,
         }
         stats = m._stats
 

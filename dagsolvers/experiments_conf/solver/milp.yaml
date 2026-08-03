@@ -12,6 +12,3 @@ tabu_edges: false
 weights_bound: 100.0
 time_limit: 1800
 target_mip_gap: 0.01
-# Single switch for callback/root/progress/final experiment diagnostics.
-# It does not change the MILP formulation or add user cuts.
-experiment_diagnostics: false

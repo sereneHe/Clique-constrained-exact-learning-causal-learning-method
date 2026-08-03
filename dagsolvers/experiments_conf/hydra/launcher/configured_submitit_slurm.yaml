@@ -7,7 +7,6 @@ defaults:
 #mem_gb: 32 # configuration used with slurm launcher
 #tasks_per_node: 60
 mem_per_cpu: 16G
-#exclude: a07
 cpus_per_task: 2
 #mem_gb: 32
 partition: amd

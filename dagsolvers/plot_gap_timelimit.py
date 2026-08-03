@@ -168,7 +168,7 @@ def find_matching_gurobi_log(solver_names: set[str]) -> Path | None:
 def generate_progress_csvs() -> None:
     solver_names = {
         MILP_CSV_NAME: {"milp"},
-        CLIQUE_CSV_NAME: {"milp_clique", "clique"},
+        CLIQUE_CSV_NAME: {"cliquewidth", "milp_cliquewidth", "clique"},
     }
     for filename, explicit_source in LOG_SOURCES.items():
         log_path = (

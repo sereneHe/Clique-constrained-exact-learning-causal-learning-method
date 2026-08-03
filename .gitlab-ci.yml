@@ -1,0 +1,55 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+stages:
+  - sanity
+  - milp
+
+default:
+  image: python:3.10
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths:
+      - .cache/pip
+  before_script:
+    - python --version
+
+sanity:syntax:
+  stage: sanity
+  script:
+    - python -m py_compile dagsolvers/solve_milp.py
+    - python -m py_compile dagsolvers/solve_milp_cliquewidth.py
+  rules:
+    - when: on_success
+
+sanity:solver-config:
+  stage: sanity
+  script:
+    - pip install pyyaml
+    - python - <<'PY'
+from pathlib import Path
+import yaml
+
+solver_dir = Path("dagsolvers/experiments_conf/solver")
+for p in sorted(solver_dir.glob("*.y*ml")):
+    with p.open("r", encoding="utf-8") as f:
+        yaml.safe_load(f)
+print("YAML parse ok:", len(list(solver_dir.glob("*.y*ml"))), "files")
+PY
+  rules:
+    - when: on_success
+
+milp:gurobi-smoke:
+  stage: milp
+  tags:
+    - gurobi-runner
+  script:
+    - pip install -r requirements.txt
+    - python - <<'PY'
+import gurobipy as gp
+print("Gurobi version:", gp.gurobi.version())
+PY
+  rules:
+    - when: manual

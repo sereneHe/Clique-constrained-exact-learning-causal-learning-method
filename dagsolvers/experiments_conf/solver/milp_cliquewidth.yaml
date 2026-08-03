@@ -1,4 +1,4 @@
-name: milp_cliquewidth
+name: cliquewidth
 loss_type: l2
 reg_type: l1
 a_reg_type: l1
@@ -9,9 +9,6 @@ constraints_mode: weights
 callback_mode: all_cycles
 clique_callback_mode: all_cliques
 max_clique_size: 5
-# Accepted for experiment-table compatibility; the historical implementation
-# keeps its original console behavior and does not emit the new diagnostics.
-experiment_diagnostics: false
 print_clique_cuts: true
 robust: false
 tabu_edges: false

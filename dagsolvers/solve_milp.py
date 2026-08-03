@@ -1,5 +1,4 @@
 from typing import Tuple, Dict
-import time
 
 import gurobipy as gp
 import numpy as np
@@ -9,12 +8,7 @@ from omegaconf import DictConfig, OmegaConf
 from notears import utils
 
 from dagsolvers.dagsolver_utils import find_minimal_dag_threshold
-from dagsolvers.metrics_utils import (
-    apply_threshold,
-    count_accuracy as count_project_accuracy,
-    find_optimal_threshold_for_shd,
-)
-from dagsolvers.optimization_diagnostics import create_diagnostics
+from dagsolvers.metrics_utils import apply_threshold, find_optimal_threshold_for_shd
 
 
 def find_cycles(edges, mode):
@@ -103,54 +97,27 @@ def check_for_cycles(model, where):
         # W = extract_adj_matrix(edges_vals, weights_vals)
         # print(W)
 
-    if where == GRB.Callback.MIP:
-        if model._optimization_diagnostics is not None:
-            model._optimization_diagnostics.record_progress(model)
-        return
-
-    if where == GRB.Callback.MIPNODE:
-        if (model._optimization_diagnostics is not None
-                and model.cbGet(GRB.Callback.MIPNODE_STATUS) == GRB.OPTIMAL
-                and model.cbGet(GRB.Callback.MIPNODE_NODCNT) < 0.5):
-            edge_vals = model.cbGetNodeRel(model._edges_vars)
-            weight_vals = model.cbGetNodeRel(model._edges_weights)
-            model._optimization_diagnostics.record_root(
-                model, edge_vals, weight_vals)
-        return
-
     if where == GRB.Callback.MIPSOL:
         #print('CALLBACK')
         # make a list of edges selected in the solution
         constr_added = False
         vals = model.cbGetSolution(model._edges_vars)
         weights_vals = model.cbGetSolution(model._edges_weights)
-        if model._optimization_diagnostics is not None:
-            model._optimization_diagnostics.record_mipsol(model, vals)
         selected_edges = gp.tuplelist((i, j) for i, j in model._edges_vars.keys()
                                       if vals[i, j] > 0.5)
         # find the shortest cycle in the selected edge list
-        detection_started = time.perf_counter()
         cycles = find_cycles(selected_edges, model._callback_mode)
-        detection_time = time.perf_counter() - detection_started
-        cut_keys = []
-        submission_started = time.perf_counter()
         for cycle in cycles:
             edges_of_cycle = []
             for i in range(len(cycle)-1):
                 edges_of_cycle.append((cycle[i+1], cycle[i]))
             edges_of_cycle.append((cycle[0], cycle[-1]))
-            cut_keys.append(tuple(sorted(edges_of_cycle)))
             #callback_constraints[1] = callback_constraints[1] + 1
             #print('NEW CONSTRAINT')
             model._lazy_count += 1
             model.cbLazy(gp.quicksum(model._edges_vars[i, j] for i, j in edges_of_cycle)
                          <= len(edges_of_cycle)-1)
             constr_added = True
-        submission_time = time.perf_counter() - submission_started
-        if model._optimization_diagnostics is not None:
-            model._optimization_diagnostics.record_separation(
-                "cycle", detection_time, submission_time, cut_keys)
-            model._optimization_diagnostics.record_mipsol_outcome(constr_added)
 
         # Compute solving statistics
         rt = model.cbGet(GRB.Callback.RUNTIME)
@@ -317,10 +284,6 @@ def solve(X, cfg: DictConfig, w_threshold, Y=None, B_ref=None, tabu_edges=None):
     m.Params.lazyConstraints = 1
     m.Params.MIPGap = target_mip_gap
     m.params.TimeLimit = time_limit
-    if hasattr(cfg, "gurobi_seed"):
-        m.Params.Seed = int(cfg.gurobi_seed)
-    if hasattr(cfg, "gurobi_threads"):
-        m.Params.Threads = int(cfg.gurobi_threads)
     m._edges_vars = W_edges_vars
     m._edges_weights = W_edges_weights
     m._lazy_count = 0
@@ -329,17 +292,10 @@ def solve(X, cfg: DictConfig, w_threshold, Y=None, B_ref=None, tabu_edges=None):
     m._stats = []
     m._d = d
     m._callback_mode = mode
-    m._optimization_diagnostics = create_diagnostics(
-        cfg, "exdbn", d, int(getattr(cfg, "max_clique_size", 5)),
-        weights_bound)
     m.optimize(check_for_cycles)
 
     sol_count = m.getAttr(GRB.attr.SolCount)
     if sol_count == 0:
-        if m._optimization_diagnostics is not None:
-            m._optimization_diagnostics.write({"solution_count": 0})
-        m.dispose()
-        gp.disposeDefaultEnv()
         return None, None, None, None, None
     gap = m.MIPGap
     lazy_count = m._lazy_count
@@ -360,26 +316,6 @@ def solve(X, cfg: DictConfig, w_threshold, Y=None, B_ref=None, tabu_edges=None):
         A.append(A_t)
 
     assert utils.is_dag(W)
-    if m._optimization_diagnostics is not None:
-        W_eval = W.copy()
-        W_eval[np.abs(W_eval) < w_threshold] = 0
-        final_accuracy = count_project_accuracy(
-            np.asarray(B_ref).astype(int), (W_eval != 0).astype(int), [], []) \
-            if B_ref is not None else {}
-        m._optimization_diagnostics.write({
-            "solution_count": int(sol_count),
-            "objective": float(m.ObjVal),
-            "best_bound": float(m.ObjBound),
-            "gap": float(gap),
-            "runtime": float(m.Runtime),
-            "node_count": float(m.NodeCount),
-            "simplex_iteration_count": float(m.IterCount),
-            "work": float(m.Work),
-            "nodes_per_second": float(m.NodeCount / max(m.Runtime, 1e-12)),
-            "final_shd_at_solver_threshold": final_accuracy.get("shd"),
-            "final_f1_at_solver_threshold": final_accuracy.get("f1score"),
-            "lazy_count": int(lazy_count),
-        })
     m.dispose()
     gp.disposeDefaultEnv()
 
@@ -437,3 +373,7 @@ if __name__ == '__main__':
     acc = utils.count_accuracy(B_true, W_est != 0)
     print(stats)
     print(acc)
+
+
+
+

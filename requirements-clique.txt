@@ -10,7 +10,7 @@ networkx
 numpy
 omegaconf
 pandas
-#pygobnilp
+pygobnilp
 scikit-learn
 scipy
 sympy

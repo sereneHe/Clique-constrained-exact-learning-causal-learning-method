@@ -1,54 +1,12 @@
 import random
 from os.path import join
-from pathlib import Path
 import networkx as nx
 import numpy as np
-from omegaconf import DictConfig
+from omegaconf import DictConfig, open_dict
 
 from dagsolvers import sachs_utils, krebs_utils, admg_generators
 from dagsolvers.dagsolver_utils import ExDagDataException
 from notears import utils
-
-
-REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-def _load_categorical_bn_benchmark(cfg: DictConfig):
-    """Load a fixed categorical BN sample and its reference DAG.
-
-    The stored CSV contains integer state codes.  Different experiment seeds
-    select deterministic subsets of the same public-network sample so the
-    solver methods see exactly the same rows for a given seed.
-    """
-    name = _normalized_problem_name(cfg.problem.name)
-    data_dir = Path(cfg.problem.get('data_path', REPO_ROOT / 'datasets' / name))
-    if not data_dir.is_absolute():
-        data_dir = REPO_ROOT / data_dir
-
-    samples_path = data_dir / 'samples_seed2027_n5000.csv'
-    adjacency_path = data_dir / 'adjacency.csv'
-    variables_path = data_dir / 'variables.txt'
-    for path in (samples_path, adjacency_path, variables_path):
-        if not path.exists():
-            raise ExDagDataException(f'Missing {name} benchmark file: {path}')
-
-    import pandas as pd
-
-    frame = pd.read_csv(samples_path)
-    variables = [line.strip() for line in variables_path.read_text().splitlines() if line.strip()]
-    if list(frame.columns) != variables:
-        raise ExDagDataException(f'{name} sample columns do not match variables.txt')
-
-    adjacency = pd.read_csv(adjacency_path, index_col=0).loc[variables, variables].to_numpy(dtype=float)
-    requested = int(cfg.problem.get('number_of_samples', len(frame)))
-    if requested <= 0 or requested > len(frame):
-        raise ExDagDataException(
-            f'{name}.number_of_samples must be in [1, {len(frame)}], got {requested}'
-        )
-    rng = np.random.default_rng(int(cfg.problem.get('seed', 0)))
-    rows = rng.permutation(len(frame))[:requested]
-    X = frame.iloc[rows].to_numpy(dtype=float)
-    return X, adjacency, variables
 
 
 def _maybe_load_static_npz(cfg: DictConfig):
@@ -84,6 +42,28 @@ def _base_graph_type_for_problem(normalized_graph_type):
     if normalized_graph_type.startswith('cliquefree_'):
         return normalized_graph_type.replace('cliquefree_', '')
     return normalized_graph_type
+
+
+def _directed_graph_density(adjacency):
+    """Return directed edge density, excluding diagonal entries."""
+    adjacency = np.asarray(adjacency)
+    d = adjacency.shape[0]
+    if d < 2:
+        return 0.0
+    off_diagonal = np.array(adjacency != 0, copy=True)
+    np.fill_diagonal(off_diagonal, False)
+    return float(np.count_nonzero(off_diagonal) / (d * (d - 1)))
+
+
+def _record_graph_densities(cfg, run, original_adjacency, final_adjacency):
+    original_density = _directed_graph_density(original_adjacency)
+    final_density = _directed_graph_density(final_adjacency)
+    with open_dict(cfg.problem):
+        cfg.problem.ori_graph_density = original_density
+        cfg.problem.after_cliquefree_density = final_density
+    if run is not None:
+        run.log_metric('ori_graph_density', original_density)
+        run.log_metric('after_cliquefree_density', final_density)
 
 
 def _use_dynamic_generation(graph_type, normalized_graph_type, cfg: DictConfig):
@@ -129,8 +109,10 @@ def _simulate_static_problem(cfg: DictConfig, run, graph_type, normalized_graph_
         run.log_param('effective_edge_ratio', edge_ratio)
     try:
         B_true = utils.simulate_dag(d, s0, base_graph_type)
+        original_B_true = np.array(B_true, copy=True)
         if clique_limit is not None:
             B_true = _break_large_cliques(B_true, clique_limit)
+        _record_graph_densities(cfg, run, original_B_true, B_true)
     except Exception as e:
         error_prefix = 'clique-free samples' if clique_limit is not None else 'samples'
         if run is not None:
@@ -224,11 +206,11 @@ def _simulate_dynamic_problem(cfg: DictConfig, run, graph_type, normalized_graph
                 break
             intra_adjacency = nx.to_numpy_array(g, nodelist=intra_nodes)
             intra_binary = (intra_adjacency != 0).astype(int)
-            if _max_undirected_clique_size(intra_binary, limit=clique_limit + 1) <= clique_limit:
+            if _max_undirected_clique_size(intra_binary, limit=clique_limit) < clique_limit:
                 break
         else:
             raise ExDagDataException(
-                f'Could not generate a dynamic {normalized_graph_type} graph with clique size <= {clique_limit} '
+                f'Could not generate a dynamic {normalized_graph_type} graph with clique size < {clique_limit} '
                 f'after {max_attempts} attempts'
             )
     except Exception as e:
@@ -239,6 +221,7 @@ def _simulate_dynamic_problem(cfg: DictConfig, run, graph_type, normalized_graph
 
     W_true = nx.to_numpy_array(g, nodelist=intra_nodes)
     B_true = (W_true != 0).astype(int)
+    _record_graph_densities(cfg, run, B_true, B_true)
     a_mat = nx.to_numpy_array(g, nodelist=intra_nodes + inter_nodes)[len(intra_nodes):, :len(intra_nodes)]
     df_x = df[intra_nodes]
     X = df_x.to_numpy()
@@ -317,7 +300,7 @@ def _break_large_cliques(B_true, clique_limit, max_iterations=1000):
         large_cliques = [
             list(candidate)
             for candidate in nx.find_cliques(nx.from_numpy_array((B_work != 0).astype(int)))
-            if len(candidate) > clique_limit
+            if len(candidate) >= clique_limit
         ]
         if not large_cliques:
             return B_work
@@ -346,10 +329,10 @@ def _simulate_dag_with_clique_limit(d, s0, graph_type, clique_limit=None, max_at
         B_true = utils.simulate_dag(d, s0, graph_type)
         if clique_limit is None:
             return B_true
-        if _max_undirected_clique_size(B_true, limit=clique_limit + 1) <= clique_limit:
+        if _max_undirected_clique_size(B_true, limit=clique_limit) < clique_limit:
             return B_true
     raise ExDagDataException(
-        f'Could not generate a {graph_type} DAG with clique size <= {clique_limit} after {max_attempts} attempts'
+        f'Could not generate a {graph_type} DAG with clique size < {clique_limit} after {max_attempts} attempts'
     )
 
 def load_problem(cfg: DictConfig, run):
@@ -410,15 +393,6 @@ def load_problem(cfg: DictConfig, run):
         B_true = W_true
         # n, d = X.shape
         # p = 0
-        Y = []
-        A_true = []
-        B_lags_true = []
-        W_bi_true = None
-        B_bi_true = None
-
-    elif normalized_graph_type in {'child', 'insurance', 'alarm'}:
-        X, W_true, intra_nodes = _load_categorical_bn_benchmark(cfg)
-        B_true = (W_true != 0).astype(int)
         Y = []
         A_true = []
         B_lags_true = []

@@ -85,52 +85,6 @@ def _env_bool(name, default=False):
     return str(v).strip().lower() in {'1', 'true', 'yes', 'y', 'on'}
 
 
-def _env_number_list(name, number_type=int):
-    """Parse an optional comma-separated numeric environment variable."""
-    raw = os.getenv(name, '').strip()
-    if not raw:
-        return None
-    try:
-        values = [number_type(item.strip()) for item in raw.split(',') if item.strip()]
-    except ValueError as exc:
-        raise ValueError(f'Invalid {name}={raw!r}: expected comma-separated numbers') from exc
-    return values or None
-
-
-def _env_method_keys():
-    """Read comma-separated plotting methods, preserving the legacy defaults."""
-    raw = os.getenv('EXDBN_METHOD_KEYS', '').strip()
-    if not raw:
-        return ['milp', 'clique', 'edge_limit']
-    return [item.strip() for item in raw.split(',') if item.strip()]
-
-
-def _method_runtime_prefix(method):
-    """Map a public method key to the runtime CSV filename prefix."""
-    normalized = str(method).strip().lower()
-    if normalized in {'milp', 'exdbn'}:
-        return 'runtime_'
-    if normalized in {'edge_limit', 'edge-limit', 'limit'}:
-        return 'limit_runtime_'
-    return f'{str(method).strip()}_runtime_'
-
-
-def _method_summary_filename(method, scenario_key):
-    """Keep legacy table names while giving every clique variant its own table."""
-    normalized = str(method).strip().lower()
-    if normalized in {'milp', 'exdbn'}:
-        return f'{scenario_key}.csv'
-    if normalized in {'edge_limit', 'edge-limit', 'limit'}:
-        return f'limit_{scenario_key}.csv'
-    return f'{str(method).strip()}_{scenario_key}.csv'
-
-
-def _timelimit_from_filename(path):
-    """Read the configured time limit from a runtime filename such as *_1800s_*.csv."""
-    match = re.search(r'_(\d+(?:\.\d+)?)s(?:_|\.)', os.path.basename(path))
-    return float(match.group(1)) if match else None
-
-
 def _normalize_legend_style(legend_style=None, default='standard'):
     """
     Canonical legend styles:
@@ -154,31 +108,19 @@ def _normalize_legend_style(legend_style=None, default='standard'):
     return aliases.get(raw, raw if raw in {'half_running_time', 'single_data', 'standard'} else default)
 
 
-# def _legend_method_labels(legend_style: str) -> dict[str, str]:
-#     if legend_style == 'half_running_time':
-#         return {
-#             'exdbn': 'EXDBN',
-#             'limit': 'Edge-limit MILP',
-#             'clique': 'Clique-width MILP',
-#         }
-#     return {
-#         'exdbn': 'EXDBN',
-#         'limit': 'Edge-limit MILP',
-#         'clique': 'Clique-width MILP',
-#     }
-
 def _legend_method_labels(legend_style: str) -> dict[str, str]:
+    if legend_style == 'half_running_time':
+        return {
+            'exdbn': 'EXDBN',
+            'limit': 'Edge-limit MILP',
+            'clique': 'Clique-width MILP',
+        }
     return {
-        'milp': 'ExDBN',
-        'exdbn': 'ExDBN',
+        'exdbn': 'EXDBN',
         'limit': 'Edge-limit MILP',
-        'clique': 'Clique',
-        'clique_B1-F2': 'Clique · First k+1',
-        'clique_B3': 'Clique · Most-Violated',
-        'clique_C3': 'Clique · QR Repair',
-        'clique_C5': 'Clique · Auto-Repair',
-        'clique_E2': 'Clique · M=20',
+        'clique': 'Clique-width MILP',
     }
+
 
 def _legend_layout_config(num_labels, legend_style=None, position_override=None, single_scenario_mode=False):
     """
@@ -220,9 +162,9 @@ def _legend_layout_config(num_labels, legend_style=None, position_override=None,
     return {
         'kind': 'figure',
         'loc': 'upper left',
-        'bbox_to_anchor': (0.79, 0.90),
+        'bbox_to_anchor': (0.84, 0.98),
         'tight_rect': (0.05, 0.10, 0.82, 0.95),
-        'legend_fontsize': 11,
+        'legend_fontsize': 7,
         'xlabel_y': 0.005,
         'ncol': 1,
     }
@@ -239,32 +181,6 @@ def _aggregate_metric_value(df_stats, col):
         # Use the same aggregation style as runtime/shd for consistent method plots.
         return series.mean()
     return series.mean()
-
-
-def _metric_label(metric):
-    labels = {
-        'f1score': 'F1 score',
-        'runtime_seconds': 'runningtime',
-        'shd': 'SHD',
-        'gap': 'MIP gap',
-        'lazy_count': 'Lazy constraints',
-        'cycle_lazy_count': 'Cycle lazy constraints',
-        'clique_lazy_count': 'Clique lazy constraints',
-    }
-    return labels.get(metric, metric)
-
-
-def _metric_file_suffix(metric):
-    aliases = {
-        'f1score': 'f1score',
-        'runtime_seconds': 'runtime',
-        'shd': 'shd',
-        'gap': 'gap',
-        'lazy_count': 'lazy_count',
-        'cycle_lazy_count': 'cycle_lazy_count',
-        'clique_lazy_count': 'clique_lazy_count',
-    }
-    return aliases.get(metric, metric.replace('.', '_'))
 
 
 def _find_f1_plateau_start(df_local, f1_tol=1e-3, min_plateau_points=3):
@@ -335,7 +251,6 @@ def build_runtime_summary_dataframe(
             'dataset': str(df_stats['dataset'].iloc[0]) if 'dataset' in df_stats.columns else os.path.basename(path),
             'features': int(df_stats['features'].iloc[0]) if 'features' in df_stats.columns else None,
             'samples': int(df_stats['samples'].iloc[0]) if 'samples' in df_stats.columns else None,
-            'timelimit': _timelimit_from_filename(path),
             '__source_file__': os.path.basename(path),
         }
         for col in metrics:
@@ -417,7 +332,6 @@ def generate_runtime_summary_csv(
             'dataset': str(df_stats['dataset'].iloc[0]) if 'dataset' in df_stats.columns else os.path.basename(path),
             'features': int(df_stats['features'].iloc[0]) if 'features' in df_stats.columns else None,
             'samples': int(df_stats['samples'].iloc[0]) if 'samples' in df_stats.columns else None,
-            'timelimit': _timelimit_from_filename(path),
         }
 
         for col in metrics:
@@ -432,7 +346,7 @@ def generate_runtime_summary_csv(
 
     out_df = pd.DataFrame(rows).sort_values(['dataset']).reset_index(drop=True)
     ordered_columns = [
-        'dataset', 'features', 'samples', 'timelimit',
+        'dataset', 'features', 'samples',
         'degree', 'runtime_seconds', 'gap', 'fdr', 'tpr', 'fpr', 'shd', 'nnz', 'precision', 'f1score', 'g_score', 'lazy_count',
         'degree_std', 'runtime_seconds_std', 'gap_std', 'fdr_std', 'tpr_std', 'fpr_std', 'shd_std', 'nnz_std',
         'precision_std', 'f1score_std', 'g_score_std', 'lazy_count_std'
@@ -456,9 +370,13 @@ def _discover_runtime_scenarios(base_dir='results/exdbn/exdbn_run', modes=('stat
         'clique_runtime_': {...},
       }
     """
-    discovered = {}
+    discovered = {
+        'runtime_': {m: set() for m in modes},
+        'limit_runtime_': {m: set() for m in modes},
+        'clique_runtime_': {m: set() for m in modes},
+    }
     pattern = re.compile(
-        r'^(?P<prefix>(?:[A-Za-z0-9-]+_)*runtime_)'
+        r'^(?P<prefix>limit_runtime_|clique_runtime_|runtime_)'
         r'(?P<mode>static|dynamic)_'
         r'(?P<scenario>[A-Za-z0-9-]+)_[A-Za-z0-9]+_d\d+_n\d+(?:_.*)?\.csv$'
     )
@@ -471,8 +389,6 @@ def _discover_runtime_scenarios(base_dir='results/exdbn/exdbn_run', modes=('stat
             prefix = m.group('prefix')
             mode = m.group('mode')
             scenario = m.group('scenario')
-            if prefix not in discovered:
-                discovered[prefix] = {available_mode: set() for available_mode in modes}
             if mode in discovered[prefix]:
                 discovered[prefix][mode].add(scenario)
     return discovered
@@ -482,7 +398,6 @@ def generate_all_runtime_summary_tables(
     base_dir='results/exdbn/exdbn_run',
     modes=('static',),
     plateau_by_f1=None,
-    method_keys=None,
 ):
     """
     Generate all summary CSV tables to base_dir:
@@ -500,22 +415,12 @@ def generate_all_runtime_summary_tables(
         'limit_runtime_': lambda s: f'limit_{s}.csv',
         'clique_runtime_': lambda s: f'clique_{s}.csv',
     }
-    requested_prefixes = None
-    if method_keys:
-        requested_prefixes = {_method_runtime_prefix(method) for method in method_keys}
 
     for runtime_prefix, mode_map in discovered.items():
-        if requested_prefixes is not None and runtime_prefix not in requested_prefixes:
-            continue
         for mode in modes:
             scenario_keys = sorted(mode_map.get(mode, set()))
             for scenario_key in scenario_keys:
-                output_filename = prefix_to_output.get(
-                    runtime_prefix,
-                    lambda s, prefix=runtime_prefix: (
-                        f'{prefix.removesuffix("runtime_").rstrip("_")}_{s}.csv'
-                    ),
-                )(scenario_key)
+                output_filename = prefix_to_output[runtime_prefix](scenario_key)
                 output_path, _ = generate_runtime_summary_csv(
                     base_dir=base_dir,
                     scenario_key=scenario_key,
@@ -546,24 +451,18 @@ def make_grid_problem_samples_plot(
     method_name_callback=None,
     append_metric_suffix=True,
     row_order=None,
-    row_y_limits=None,
-    independent_y_axes=False,
     legend_style=None,
     legend_position=None,
     single_scenario_mode=False,
-    x_col='num_vars',
-    x_label='Number of nodes (d)',
 ):
     font_size = 8 if single_scenario_mode else 10
     tick_font_size = 6 if single_scenario_mode else 7
     relplot_height = 2.2 if single_scenario_mode else 1.9
     relplot_aspect = 1.5 if single_scenario_mode else 1.5
 
-    if x_col not in data_to_plot.columns:
-        raise KeyError(f'Missing x-axis column {x_col!r}')
-
-    data_to_plot[x_col] = pd.to_numeric(data_to_plot[x_col], errors='coerce')
-    data_to_plot = data_to_plot.dropna(subset=[x_col]).copy()
+    # x 轴范围
+    max_number_vars = ((round(data_to_plot['num_vars'].max()) // 5) + 1) * 5
+    min_number_vars = (round(data_to_plot['num_vars'].min()) // 5) * 5
 
     if '.' in y_col:
         file_suffix = y_col.split('.', 1)[1].replace('.', '_')
@@ -613,7 +512,7 @@ def make_grid_problem_samples_plot(
         groupby_keys.append('samples')
 
     relplot_kwargs = dict(
-        x=x_col,
+        x='num_vars',
         y=y_col + '_mean',
         hue='Method',
         row='row_key',
@@ -627,10 +526,6 @@ def make_grid_problem_samples_plot(
         relplot_kwargs['row_order'] = row_order
     if col_name:
         relplot_kwargs['col'] = col_name
-    # A facet-specific y-limit requires independent y-axes.  This is used for
-    # the low-range SF-5 SHD row without constraining the ER rows.
-    if row_y_limits or independent_y_axes:
-        relplot_kwargs['facet_kws'] = {'sharey': False}
 
     pic = sns.relplot(**relplot_kwargs)
 
@@ -669,23 +564,21 @@ def make_grid_problem_samples_plot(
             get_solver_columns_names(group_data) + ['Method']
         )
 
-        if row_y_limits and row_val in row_y_limits:
-            ax.set_ylim(*row_y_limits[row_val])
-        elif y_lim is not None:
+        if y_lim is not None:
             ax.set_ylim(ymax=y_lim)
 
         ax_handles, ax_labels = axes[0, 0].get_legend_handles_labels()
 
         for method, method_data in group_data.groupby('Method', dropna=False):
             color = ax_handles[ax_labels.index(method)].get_color()
-            method_data = method_data.sort_values(x_col)
+            method_data = method_data.sort_values('num_vars')
 
             std_col = y_col + '_std'
             if std_col not in method_data.columns and (y_col + '_sd') in method_data.columns:
                 std_col = y_col + '_sd'
             if std_col in method_data.columns:
                 ax.fill_between(
-                    method_data[x_col],
+                    method_data['num_vars'],
                     method_data[y_col + '_mean'] - method_data[std_col],
                     method_data[y_col + '_mean'] + method_data[std_col],
                     alpha=0.1,
@@ -694,7 +587,7 @@ def make_grid_problem_samples_plot(
 
             if plot_max and (y_col + '_max') in method_data.columns:
                 ax.plot(
-                    method_data[x_col],
+                    method_data['num_vars'],
                     method_data[y_col + '_max'],
                     linestyle='--',
                     color=color,
@@ -704,7 +597,7 @@ def make_grid_problem_samples_plot(
 
             if plot_min and (y_col + '_min') in method_data.columns:
                 ax.plot(
-                    method_data[x_col],
+                    method_data['num_vars'],
                     method_data[y_col + '_min'],
                     linestyle='dotted',
                     color=color,
@@ -728,16 +621,15 @@ def make_grid_problem_samples_plot(
     )
 
     pic.figure.text(
-        x=0.5,
-        y=legend_cfg['xlabel_y'] + 0.08,
-            s=x_label,
+        x=0.5, y=legend_cfg['xlabel_y'],
+        s="Number of nodes (d)",
         ha='center',
-        fontsize=9
+        fontsize=font_size
     )
 
     if single_scenario_mode and len(pic.row_names) == 1:
         pic.figure.text(
-            x=0.055, y=0.5,
+            x=0.02, y=0.5,
             s=label,
             ha='center',
             va='center',
@@ -746,25 +638,21 @@ def make_grid_problem_samples_plot(
         )
     else:
         pic.figure.text(
-            x=0.85, y=0.5,
+            x=1.01, y=0.5,
             s=label,
             ha='center',
             va='center',
             rotation=270,
-            fontsize=font_size + 4
+            fontsize=font_size
         )
 
-        row_label_side = os.getenv('EXDBN_ROW_LABEL_SIDE', 'left').strip().lower()
         for i, row_name in enumerate(pic.row_names):
-            # Place right-side row labels past the right-most facet, where
-            # they remain distinct from the shared metric label and legend.
-            row_axis = pic.axes[i, -1] if row_label_side == 'right' else pic.axes[i, 0]
-            row_axis.annotate(
+            pic.axes[i, 0].annotate(
                 text=row_name,
-                xy=(1.12 if row_label_side == 'right' else -0.2, 0.0 if row_label_side == 'right' else 0.5),
+                xy=(-0.5, 0.5),
                 xycoords='axes fraction',
                 ha='center',
-                va='bottom' if row_label_side == 'right' else 'center',
+                va='center',
                 fontsize=font_size,
                 rotation=90
             )
@@ -772,7 +660,7 @@ def make_grid_problem_samples_plot(
     for j, col_name in enumerate(pic.col_names):
         pic.axes[0, j].annotate(
             text=f'n={col_name}',
-            xy=(0.5, 1.1 if single_scenario_mode else 1.02),
+            xy=(0.5, 1.1),
             xycoords='axes fraction',
             ha='center',
             va='center',
@@ -780,21 +668,10 @@ def make_grid_problem_samples_plot(
         )
 
     pic.set_titles('')
-    if x_col == 'num_vars':
-        max_number_vars = ((round(data_to_plot[x_col].max()) // 5) + 1) * 5
-        min_number_vars = (round(data_to_plot[x_col].min()) // 5) * 5
-        pic.set(xticks=list(range(min_number_vars, max_number_vars + 1, 5)))
+    pic.set(xticks=list(range(min_number_vars, max_number_vars + 1, 5)))
 
     figure = pic.figure
-    # A selected method can be absent from the first facet.  Merge handles
-    # from all facets so the shared legend still represents every method.
-    legend_entries = {}
-    for ax in pic.axes.flatten():
-        ax_handles, ax_labels = ax.get_legend_handles_labels()
-        for handle, label_text in zip(ax_handles, ax_labels):
-            legend_entries.setdefault(label_text, handle)
-    labels = list(legend_entries)
-    handles = [legend_entries[label_text] for label_text in labels]
+    handles, labels = pic.axes[0][0].get_legend_handles_labels()
     legend_cfg = _legend_layout_config(
         len(labels),
         legend_style=legend_style,
@@ -868,11 +745,7 @@ def make_grid_problem_samples_plot(
     else:
         filename = f'{outputfile}.png'
 
-    formats = [item.strip().lower().lstrip('.') for item in os.getenv('EXDBN_PLOT_FORMATS', 'png').split(',') if item.strip()]
-    dpi = int(os.getenv('EXDBN_PLOT_DPI', '300'))
-    stem = os.path.splitext(filename)[0]
-    for image_format in dict.fromkeys(formats):
-        figure.savefig(join(output_dir, f'{stem}.{image_format}'), bbox_inches='tight', dpi=dpi)
+    figure.savefig(join(output_dir, filename), bbox_inches='tight', dpi=300)
     plt.close(figure)
 
 
@@ -907,39 +780,6 @@ def _runtime_dataset_label(row):
     return dataset.removesuffix(".npz")
 
 
-def _runtime_dataset_dimension_label(row):
-    """
-    Row label for time-limit plots when the same scenario has multiple d values.
-    The title prefix is controlled from shell via EXDBN_ROW_TITLE.
-    """
-    dataset = str(row.get("dataset", ""))
-    title = os.getenv('EXDBN_ROW_TITLE', '').strip()
-
-    d_match = re.search(r'_d(\d+)_', dataset)
-    if d_match:
-        d_label = f'd={d_match.group(1)}'
-    else:
-        d_label = dataset.removesuffix(".npz")
-
-    return f'{title}\n{d_label}' if title else d_label
-
-
-def _runtime_dimension_row_order(data):
-    if 'dataset' not in data.columns:
-        return None
-
-    labels = data.apply(_runtime_dataset_dimension_label, axis=1)
-    dims = pd.to_numeric(
-        data['dataset'].astype(str).str.extract(r'_d(\d+)_', expand=False),
-        errors='coerce',
-    )
-    order_df = pd.DataFrame({'label': labels, 'dim': dims})
-    order_df = order_df.drop_duplicates()
-    order_df['dim_sort'] = order_df['dim'].fillna(float('inf'))
-    order_df = order_df.sort_values(['dim_sort', 'label'])
-    return order_df['label'].tolist()
-
-
 def plot_three_method_tables_one_figure(
     base_dir='results/exdbn/exdbn_run',
     scenario_key='SF-5-0',
@@ -956,7 +796,7 @@ def plot_three_method_tables_one_figure(
     table_specs = [
         (os.path.join(base_dir, f'{scenario_key}.csv'), 'milp'),
         (os.path.join(base_dir, f'limit_{scenario_key}.csv'), 'edge_limit'),
-        (os.path.join(base_dir, f'clique_{scenario_key}.csv'), 'milp_clique'),
+        (os.path.join(base_dir, f'clique_{scenario_key}.csv'), 'cliquewidth'),
     ]
 
     dfs = []
@@ -983,12 +823,12 @@ def plot_three_method_tables_one_figure(
     legend_style = _normalize_legend_style(legend_style, default='standard')
     label_map = _legend_method_labels(legend_style)
 
-    method_order = ['milp', 'edge_limit', 'milp_clique']
+    method_order = ['milp', 'edge_limit', 'cliquewidth']
     # palette = {'milp': '#1f77b4',
     #            'edge_limit': '#ff7f0e',
-    #            'milp_clique': '#2ca02c'}
+    #            'cliquewidth': '#2ca02c'}
     palette = {"milp": "#1f77b4",
-                "milp_clique": "#ff7f0e",
+                "cliquewidth": "#ff7f0e",
                 "edge_limit": "#2ca02c"}
 
     metrics = [
@@ -1038,7 +878,7 @@ def plot_three_method_tables_one_figure(
             fontsize=legend_cfg['legend_fontsize'],
         )
 
-    fig.suptitle(f'{scenario_key}: milp vs edge_limit vs milp_clique', fontsize=11, y=1.02)
+    fig.suptitle(f'{scenario_key}: milp vs edge_limit vs cliquewidth', fontsize=11, y=1.02)
     fig.tight_layout(rect=_legend_layout_config(len(labels), legend_style=legend_style)['tight_rect'])
 
     os.makedirs(output_dir, exist_ok=True)
@@ -1056,15 +896,12 @@ def plot_three_method_tables_as_three_figures(
     output_dir='figures',
     output_prefix='exdbn_methods',
     legend_style=None,
-    y_metrics=None,
-    x_axis='nodes',
-    features=None,
-    timelimits=None,
-    method_keys=None,
 ):
     """
     Reuse existing grid plotting logic and output three figures:
-      - metrics requested by EXDBN_Y_AXIS / y_metrics
+      - f1score
+      - runtime_seconds
+      - shd
     with method comparison from:
       {scenario}.csv, limit_{scenario}.csv, clique_{scenario}.csv
     for each scenario in scenario_keys.
@@ -1075,24 +912,13 @@ def plot_three_method_tables_as_three_figures(
     if not scenario_keys:
         scenario_keys = ['ER-3-0', 'ER-4-0', 'SF-5-0']
 
-    timelimit_axis = x_axis in {'timelimit', 'time_limit', 'time-limit'}
-    # "Single scenario" is axis-dependent:
-    #   nodes     -> exactly one requested scenario key;
-    #   timelimit -> exactly one requested feature/node count.
-    # An unset EXDBN_FEATURES is not considered a single timelimit scenario,
-    # even if filtering happens to leave only one feature in the data.
-    if timelimit_axis:
-        single_scenario_mode = bool(features) and len({int(value) for value in features}) == 1
-    else:
-        single_scenario_mode = len(scenario_keys) == 1
-
-    method_keys = method_keys or ['milp', 'clique', 'edge_limit']
     dfs = []
     scenario_method_presence = {k: set() for k in scenario_keys}
     for scenario_key in scenario_keys:
         table_specs = [
-            (os.path.join(base_dir, _method_summary_filename(method, scenario_key)), method)
-            for method in method_keys
+            (os.path.join(base_dir, f'{scenario_key}.csv'), 'exdbn'),
+            (os.path.join(base_dir, f'limit_{scenario_key}.csv'), 'limit'),
+            (os.path.join(base_dir, f'clique_{scenario_key}.csv'), 'clique'),
         ]
         for path, method_name in table_specs:
             if not os.path.exists(path):
@@ -1114,26 +940,6 @@ def plot_three_method_tables_as_three_figures(
     data = data.dropna(subset=['num_vars']).copy()
     data['num_vars'] = data['num_vars'].astype(int)
 
-    if features:
-        requested_features = {int(value) for value in features}
-        data = data[data['num_vars'].isin(requested_features)].copy()
-
-    if timelimits:
-        if 'timelimit' not in data.columns:
-            raise KeyError(
-                'EXDBN_TIMELIMITS is set, but the summary tables have no timelimit column. '
-                'Use EXDBN_GENERATE_SUMMARY_TABLES=1 to regenerate them.'
-            )
-        requested_timelimits = {float(value) for value in timelimits}
-        parsed_timelimits = pd.to_numeric(data['timelimit'], errors='coerce')
-        data = data[parsed_timelimits.isin(requested_timelimits)].copy()
-
-    if data.empty:
-        raise RuntimeError(
-            f'No rows match EXDBN_FEATURES={features!r} and '
-            f'EXDBN_TIMELIMITS={timelimits!r}'
-        )
-
     # Keep only requested scenarios in case unrelated rows exist.
     if 'dataset' in data.columns:
         pattern = '|'.join(re.escape(s) for s in scenario_keys)
@@ -1145,7 +951,7 @@ def plot_three_method_tables_as_three_figures(
         methods = scenario_method_presence.get(s, set())
         if methods:
             valid_scenarios.append(s)
-            missing = set(method_keys) - methods
+            missing = {'exdbn', 'limit', 'clique'} - methods
             if missing:
                 print(f'[PLOT] scenario={s} missing methods={sorted(missing)}, plotting available={sorted(methods)}')
     row_order = []
@@ -1160,22 +966,13 @@ def plot_three_method_tables_as_three_figures(
     single_scenario_output = _env_bool('EXDBN_SINGLE_SCENARIO_OUTPUT', default=False)
     scenario_suffix = None
     legend_position = None
-    if single_scenario_output and single_scenario_mode and len(row_order) == 1:
+    if single_scenario_output and len(row_order) == 1:
         scenario_suffix = row_order[0]
         legend_position = 'bottom'
-
-    default_metrics = ['runtime_seconds', 'f1score', 'shd']
-    if y_metrics is None or not str(y_metrics).strip():
-        y_metrics = default_metrics
-    else:
-        y_metrics = [
-            item.strip()
-            for item in str(y_metrics).replace(',', '/').split('/')
-            if item.strip()
-        ] or default_metrics
+    single_scenario_mode = scenario_suffix is not None
 
     # Ensure *_mean columns exist for plotting function.
-    for metric in y_metrics:
+    for metric in ['f1score', 'runtime_seconds', 'shd']:
         mean_col = f'{metric}_mean'
         if mean_col not in data.columns and metric in data.columns:
             data[mean_col] = data[metric]
@@ -1185,9 +982,7 @@ def plot_three_method_tables_as_three_figures(
             data[std_col] = data[sd_col]
 
     if legend_style is None:
-        # Preserve the original bottom-center layout for a single scenario;
-        # use the expanded right-side layout only for multi-scenario figures.
-        legend_style = 'single_data' if single_scenario_mode else 'standard'
+        legend_style = 'single_data' if len(row_order) == 1 else 'standard'
     legend_style = _normalize_legend_style(legend_style, default='standard')
     legend_labels = _legend_method_labels(legend_style)
 
@@ -1196,58 +991,67 @@ def plot_three_method_tables_as_three_figures(
         return legend_labels.get(method, method)
 
     os.makedirs(output_dir, exist_ok=True)
-    if timelimit_axis:
-        x_col = 'timelimit'
-        x_label = 'Time limit(s)'
-        problem_name_callback = _runtime_dataset_dimension_label
-        dimension_row_order = _runtime_dimension_row_order(data)
-        if dimension_row_order:
-            row_order = dimension_row_order
-    else:
-        x_col = 'num_vars'
-        x_label = 'Number of nodes (d)'
-        problem_name_callback = _runtime_dataset_label
 
-    output_paths = []
-    sf_shd_ymax_text = os.getenv('EXDBN_SF_SHD_YMAX', '').strip()
-    sf_shd_ymax = float(sf_shd_ymax_text) if sf_shd_ymax_text else None
-    for metric in y_metrics:
-        mean_col = f'{metric}_mean'
-        if mean_col not in data.columns:
-            print(f'[PLOT] skip metric={metric}: missing column {mean_col}')
-            continue
+    make_grid_problem_samples_plot(
+        data_to_plot=data,
+        y_col='f1score',
+        label='F1 score',
+        output_dir=output_dir,
+        outputfile=f'{output_prefix}_f1score_{scenario_suffix}' if scenario_suffix else f'{output_prefix}_f1score',
+        problem_cols=['dataset'],
+        plot_max=False,
+        plot_min=False,
+        problem_name_callback=_runtime_dataset_label,
+        y_lim=None,
+        method_name_callback=method_name_callback,
+        append_metric_suffix=False,
+        row_order=row_order,
+        legend_style=legend_style,
+        legend_position=legend_position,
+        single_scenario_mode=single_scenario_mode,
+    )
+    make_grid_problem_samples_plot(
+        data_to_plot=data,
+        y_col='runtime_seconds',
+        label='runningtime',
+        output_dir=output_dir,
+        outputfile=f'{output_prefix}_runtime_{scenario_suffix}' if scenario_suffix else f'{output_prefix}_runtime',
+        problem_cols=['dataset'],
+        plot_max=False,
+        plot_min=False,
+        problem_name_callback=_runtime_dataset_label,
+        y_lim=None,
+        method_name_callback=method_name_callback,
+        append_metric_suffix=False,
+        row_order=row_order,
+        legend_style=legend_style,
+        legend_position=legend_position,
+        single_scenario_mode=single_scenario_mode,
+    )
+    make_grid_problem_samples_plot(
+        data_to_plot=data,
+        y_col='shd',
+        label='SHD',
+        output_dir=output_dir,
+        outputfile=f'{output_prefix}_shd_{scenario_suffix}' if scenario_suffix else f'{output_prefix}_shd',
+        problem_cols=['dataset'],
+        plot_max=False,
+        plot_min=False,
+        problem_name_callback=_runtime_dataset_label,
+        y_lim=None,
+        method_name_callback=method_name_callback,
+        append_metric_suffix=False,
+        row_order=row_order,
+        legend_style=legend_style,
+        legend_position=legend_position,
+        single_scenario_mode=single_scenario_mode,
+    )
 
-        suffix = _metric_file_suffix(metric)
-        outputfile = f'{output_prefix}_{suffix}_{scenario_suffix}' if scenario_suffix else f'{output_prefix}_{suffix}'
-        make_grid_problem_samples_plot(
-            data_to_plot=data,
-            y_col=metric,
-            label=_metric_label(metric),
-            output_dir=output_dir,
-            outputfile=outputfile,
-            problem_cols=['dataset'],
-            plot_max=False,
-            plot_min=False,
-            problem_name_callback=problem_name_callback,
-            y_lim=None,
-            method_name_callback=method_name_callback,
-            append_metric_suffix=False,
-            row_order=row_order,
-            # When an explicit SF limit is not requested, SHD panels retain
-            # independent, data-driven y-ranges rather than sharing the ER range.
-            row_y_limits=({'cliquefree-sf-5-0': (0.0, sf_shd_ymax)}
-                          if metric == 'shd' and sf_shd_ymax is not None and not timelimit_axis
-                          else None),
-            independent_y_axes=(metric == 'shd' and not timelimit_axis),
-            legend_style=legend_style,
-            legend_position=legend_position,
-            single_scenario_mode=single_scenario_mode,
-            x_col=x_col,
-            x_label=x_label,
-        )
-        output_paths.append(os.path.join(output_dir, f'{outputfile}.png'))
-
-    return output_paths
+    return [
+        os.path.join(output_dir, f'{output_prefix}_f1score_{scenario_suffix}.png' if scenario_suffix else f'{output_prefix}_f1score.png'),
+        os.path.join(output_dir, f'{output_prefix}_runtime_{scenario_suffix}.png' if scenario_suffix else f'{output_prefix}_runtime.png'),
+        os.path.join(output_dir, f'{output_prefix}_shd_{scenario_suffix}.png' if scenario_suffix else f'{output_prefix}_shd.png'),
+    ]
 
 
 def discover_summary_scenarios(base_dir='results/exdbn/exdbn_run'):
@@ -1280,41 +1084,17 @@ def discover_summary_scenarios(base_dir='results/exdbn/exdbn_run'):
 # main
 # ============================================================
 if __name__ == "__main__":
-    scenario_keys = os.getenv('EXDBN_SCENARIO_KEYS', os.getenv('SCENARIO_KEYS', 'all'))
-    x_axis = os.getenv('EXDBN_X_AXIS', 'nodes').strip().lower()
-    summary_modes = os.getenv('EXDBN_SUMMARY_MODES', 'static')
-    y_axis = os.getenv('EXDBN_Y_AXIS', 'runtime_seconds/f1score/shd')
-    method_keys = _env_method_keys()
-    features = _env_number_list('EXDBN_FEATURES', int)
-    timelimits = _env_number_list('EXDBN_TIMELIMITS', float)
-    project_dir = os.path.dirname(os.path.abspath(__file__))
-
-    if str(scenario_keys).strip().lower() not in {'', 'all'} and ',' not in str(scenario_keys):
-        default_base_dir = os.path.join(project_dir, 'results', str(scenario_keys))
-        default_output_dir = os.path.join(project_dir, 'reports', str(scenario_keys))
-    else:
-        default_base_dir = os.path.join(project_dir, 'results')
-        default_output_dir = os.path.join(project_dir, 'reports')
-
-    base_dir = os.getenv('EXDBN_TABLE_BASE_DIR', default_base_dir)
-    output_dir = os.getenv('EXDBN_PLOT_OUTPUT_DIR', default_output_dir)
-    output_prefix = os.getenv('EXDBN_PLOT_OUTPUT_PREFIX', f'{x_axis}_{summary_modes}')
+    base_dir = os.getenv('EXDBN_TABLE_BASE_DIR', 'results/exdbn/exdbn_run')
+    scenario_keys = os.getenv('EXDBN_SCENARIO_KEYS', 'all')
+    output_dir = os.getenv('EXDBN_PLOT_OUTPUT_DIR', 'figures')
+    output_prefix = os.getenv('EXDBN_PLOT_OUTPUT_PREFIX', 'exdbn_methods')
     legend_style = os.getenv('EXDBN_LEGEND_STYLE', '')
     generate_summaries = _env_bool('EXDBN_GENERATE_SUMMARY_TABLES', default=True)
+    summary_modes = os.getenv('EXDBN_SUMMARY_MODES', 'static')
     modes = tuple(m.strip() for m in summary_modes.split(',') if m.strip())
 
-    if x_axis not in {'nodes', 'node', 'd', 'timelimit', 'time_limit', 'time-limit'}:
-        raise ValueError(
-            f"Unsupported EXDBN_X_AXIS={x_axis!r} in this plotting entry. "
-            "Use EXDBN_X_AXIS=nodes or EXDBN_X_AXIS=timelimit."
-        )
-
     if generate_summaries:
-        generated = generate_all_runtime_summary_tables(
-            base_dir=base_dir,
-            modes=modes,
-            method_keys=method_keys,
-        )
+        generated = generate_all_runtime_summary_tables(base_dir=base_dir, modes=modes)
         if generated:
             print(f'Generated {len(generated)} summary tables under {base_dir}')
         else:
@@ -1323,11 +1103,7 @@ if __name__ == "__main__":
     if isinstance(scenario_keys, str) and scenario_keys.strip().lower() == 'all':
         scenario_keys = discover_summary_scenarios(base_dir=base_dir)
         if not scenario_keys:
-            base_name = os.path.basename(os.path.abspath(base_dir))
-            if os.path.exists(os.path.join(base_dir, f'{base_name}.csv')) or os.path.exists(os.path.join(base_dir, f'clique_{base_name}.csv')):
-                scenario_keys = [base_name]
-            else:
-                raise FileNotFoundError(f'No summary scenario tables found under {base_dir}')
+            raise FileNotFoundError(f'No summary scenario tables found under {base_dir}')
         scenario_keys = ','.join(scenario_keys)
 
     output_paths = plot_three_method_tables_as_three_figures(
@@ -1336,11 +1112,6 @@ if __name__ == "__main__":
         output_dir=output_dir,
         output_prefix=output_prefix,
         legend_style=legend_style or None,
-        y_metrics=y_axis,
-        x_axis=x_axis,
-        features=features,
-        timelimits=timelimits,
-        method_keys=method_keys,
     )
     for path in output_paths:
         print(f'Figure saved to {path}')
