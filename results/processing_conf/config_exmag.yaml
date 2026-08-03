@@ -1,0 +1,21 @@
+
+experiment: GRAPHS
+
+plot_dpi: [50, 300]
+csv_file_path: .
+method_detail_names: false
+experiments_sources:
+  - [[EXMAG_NOTABU2], mlflow_planserver, '']
+load_from_file: /Users/pavel/0_code/0_causal/bestdagsolverintheworld/results/outputs/2026-04-29/10-50-06/dataframe
+type: EXMAG
+graph: grid2
+filter: ['filter1', 'filter2']
+
+#defaults:
+#  - solver: milp
+#  - problem: path
+#  - _self_
+
+
+
+

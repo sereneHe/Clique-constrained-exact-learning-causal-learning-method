@@ -1,0 +1,31 @@
+
+hydra:
+  # Keep both single-run and multirun Hydra artifacts under one discoverable
+  # tree.  Sweep launchers may still override hydra.sweep.dir explicitly.
+  run:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}
+  launcher:
+    n_jobs: 1
+    prefer: processes
+#    prefer: processes # use processes instead of threads
+#    backend: multiprocessing # use multiprocessing backend instead of loky
+  sweeper:
+    # max_batch_size: 500 # - only for cluster
+    params:
+      #scenario:
+      #distribution_coefficient: 1,2,3,4
+experiment: DAGS article
+tracking: mlflow
+plot: false
+plot_dpi: [50, 300]
+skip_first: 0
+defaults:
+  - solver: milp
+  - problem: path
+  - override hydra/launcher: joblib
+  - _self_
+
+

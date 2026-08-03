@@ -1,0 +1,6 @@
+name: nips2023
+seed: 1
+variant: alarms
+data_path: '../../0_causal/datasets/NeurIPS2023/sample'
+normalize: False
+

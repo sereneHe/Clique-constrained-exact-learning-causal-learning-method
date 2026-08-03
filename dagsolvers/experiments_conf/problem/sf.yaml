@@ -1,0 +1,11 @@
+name: sf
+number_of_variables: 7
+edge_ratio: 3
+generator: notears
+number_of_samples: 100
+sem_type: gauss
+seed: 3
+normalize: False
+noise_scale: 1.0
+noise_scale_variance: null
+internal_normalization: false

@@ -1,0 +1,3 @@
+name: lingam
+lambda1: 0.02
+loss_type: l2

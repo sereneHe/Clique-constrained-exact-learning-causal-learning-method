@@ -1,0 +1,5 @@
+name: load_from_file
+number_of_variables: 7
+subfolder_prefix: table
+seed: 0
+data_path: '/Users/pavel/Documents/1_Projects_Research/10_causality/ExMAG/data'

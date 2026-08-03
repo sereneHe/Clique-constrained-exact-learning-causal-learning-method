@@ -1,0 +1,6 @@
+name: dynotears
+loss_type: l2
+reg_type: l1
+lambda1: 0.03
+lambda2: 0.03
+nonzero_threshold: 0.1

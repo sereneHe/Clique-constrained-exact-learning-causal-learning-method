@@ -1,0 +1,5 @@
+name: admissions
+seed: 1
+data_path: '../datasets/admissions/UCBadmit_long_samples.csv'
+normalize: False
+p: 0

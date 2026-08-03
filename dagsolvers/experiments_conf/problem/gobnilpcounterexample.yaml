@@ -1,0 +1,8 @@
+name: PATHPERM
+number_of_variables: 3
+number_of_samples: 3000
+sem_type: gauss
+seed: 1
+only_01: true
+normalize: False
+

@@ -1,0 +1,6 @@
+name: alarm
+seed: 1
+number_of_samples: 2000
+normalize: true
+p: 0
+data_path: datasets/alarm

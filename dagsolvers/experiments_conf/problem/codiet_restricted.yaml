@@ -1,0 +1,11 @@
+name: codiet
+seed: 1
+n: 500
+#n: null
+p: 0
+data_path: '../../codiet_data/'
+normalize: False
+scale_data: quantile09
+data_filename: 'features.feather' # 'marks_data.feather'
+knowledge_graph_filename: 'codiet_re_graph_20241220_full.graphml' # or 'knowledge_graph_intersection.graphml' or 'codiet_re_graph_20241220_full.graphml' or null to not use it
+features: [protein, weight-control, hba1c, cholesterol, serving-size, starch, vitamin-d, dopamine, serotonin, caffeine, calcium, glucose, zinc, magnesium, fruit]

@@ -1,0 +1,9 @@
+name: ipbm
+bowfree: true
+arid: false
+cuts: ''
+heuristics: ''
+c_size: 2 # null
+single_parent_size:  3
+other_c_parent_size: 1
+time_limit: 1800

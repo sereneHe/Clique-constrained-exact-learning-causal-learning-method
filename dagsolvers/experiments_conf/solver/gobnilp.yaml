@@ -1,0 +1,7 @@
+name: gobnilp
+loss_type: l2
+reg_type: l1
+palim: null
+time_limit: 1800
+data_type: continuous
+score: BGe

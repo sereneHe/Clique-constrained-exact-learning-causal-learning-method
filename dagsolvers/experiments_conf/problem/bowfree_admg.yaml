@@ -1,0 +1,11 @@
+name: bowfree_admg
+number_of_variables: 10
+pdir: 0.4
+pbidir: 0.3
+max_in_arrows: null # 3
+enforce_mag: True
+number_of_samples: 100
+sem_type: gauss
+seed: 1
+normalize: False
+p: 0

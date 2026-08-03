@@ -1,0 +1,7 @@
+name: PATH
+number_of_variables: 3
+number_of_samples: 100
+sem_type: gauss
+seed: 1
+normalize: False
+noise_scale: 1.0

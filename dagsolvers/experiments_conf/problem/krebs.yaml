@@ -1,0 +1,8 @@
+name: krebs
+variant: krebsT
+data_path: '../data/krebs'
+seed: 1
+measurements: 10
+p: 1
+normalize: False
+

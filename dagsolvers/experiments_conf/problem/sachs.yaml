@@ -1,0 +1,5 @@
+name: Sachs
+seed: 1
+variant: 1
+normalize: false
+data_path: '../../0_causal/datasets'

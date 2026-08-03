@@ -1,0 +1,11 @@
+name: er
+number_of_variables: 35
+edge_ratio: 5
+generator: notears
+number_of_samples: 200
+sem_type: gauss
+seed: 9
+normalize: false
+noise_scale: 1.0
+noise_scale_variance: null
+internal_normalization: false

@@ -1,0 +1,7 @@
+name: cds
+seed: 1
+n: 1000
+p: 0
+granularity: 1
+data_path: '../../datasets/CDS_Data'
+normalize: False

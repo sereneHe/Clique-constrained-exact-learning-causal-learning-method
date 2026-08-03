@@ -1,0 +1,5 @@
+name: bnlearn
+seed: 1
+variant: sachs
+number_of_samples: 10
+normalize: True
