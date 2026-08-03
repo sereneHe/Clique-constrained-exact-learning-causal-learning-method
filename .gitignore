@@ -1,40 +1,15 @@
 __pycache__/
 *.py[cod]
-*.so
-.env
-.envrc
 .venv/
 env/
 venv/
-.pytest_cache/
-.mypy_cache/
-.coverage*
-htmlcov/
-build/
-dist/
-*.egg-info/
-.eggs/
 .DS_Store
-.idea/
-.vscode/
 *.log
 gurobi.lic
-dagsolvers/mlruns/
-dagsolvers/multirun/
-# dagsolvers/outputs/
-# dagsolvers/reports/
 dagsolvers/results/
-.worktrees/
-_remote_snapshots/
-downloads/
-
-dagsolvers/logs/
-dagsolvers/outputs/
 dagsolvers/reports/
+dagsolvers/outputs/
+dagsolvers/logs/
+dagsolvers/multirun/
+dagsolvers/mlruns/
 dagsolvers/metacentrum_runs/
-
-# Generated execution traces excluded from published result snapshots
-**/multirun/
-**/mlruns/
-**/log/
-**/logs/

@@ -1,2 +1,0 @@
-dataset,features,samples,p,degree,runtime_seconds,gap,fdr,tpr,fpr,shd,nnz,precision,f1score,g_score,lazy_count,cycle_lazy_count,clique_lazy_count,clique_user_count,clique_preadded_count
-static_cliquefree-er-2-0_gauss_d6_n50,6,50,0,1,0.20622897148132324,0.009952234742734684,0.1,0.75,0.010416666666666666,2.5,10,0.9,0.8181818181818182,0.6666666666666666,45,45,0,,

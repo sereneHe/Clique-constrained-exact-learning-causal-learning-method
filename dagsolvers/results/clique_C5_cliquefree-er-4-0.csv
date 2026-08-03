@@ -1,2 +1,0 @@
-dataset,features,samples,timelimit,degree,runtime_seconds,gap,fdr,tpr,fpr,shd,nnz,precision,f1score,g_score,lazy_count,degree_std,runtime_seconds_std,gap_std,fdr_std,tpr_std,fpr_std,shd_std,nnz_std,precision_std,f1score_std,g_score_std,lazy_count_std
-cliquefree_er,20,2000,1800.0,3.0,1800.0881999999997,0.555187,0.0,0.9899683544303798,0.0,0.8,79.0,1.0,0.9949368,0.9899684000000001,,1.5811388300841898,0.03025227264189133,0.04711440935637418,0.0,0.010467941154807358,0.0,0.8366600265340756,1.0,0.0,0.005295296847203164,0.01046792686256453,

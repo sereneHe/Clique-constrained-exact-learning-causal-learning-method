@@ -1,5 +1,0 @@
-name: boss
-cmd: 'java -jar /home/rytirpav/boss/causal-cmd-1.11.0-jar-with-dependencies.jar  --algorithm boss --data-type continuous --dataset dataset.txt --delimiter tab --score sem-bic-score --json-graph'
-lambda1: 0.02 # not in use
-loss_type: l2 # not in use
-

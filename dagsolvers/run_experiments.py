@@ -18,11 +18,11 @@ import numpy as np
 from hydra.core.hydra_config import HydraConfig
 from mlflow import log_metric, log_text
 
-from dagsolvers.ploting_utils import make_plots
-from dagsolvers.solve_causal_learn import solve_fci
+# from dagsolvers.ploting_utils import make_plots
+# from dagsolvers.solve_causal_learn import solve_fci
 
-from dagsolvers.solvers.IPBMandHforCGL.solver_ipbm import solve_ipbm
-from dagsolvers.sortnregress import sortnregress
+# from dagsolvers.solvers.IPBMandHforCGL.solver_ipbm import solve_ipbm
+# from dagsolvers.sortnregress import sortnregress
 from dagsolvers.varsortability import varsortability
 
 logger = logging.getLogger(__name__)
@@ -37,8 +37,8 @@ from dagsolvers.metrics_utils import calculate_metrics, calculate_metrics_pag, c
     least_square_cost, apply_threshold, find_optimal_threshold_for_shd
 from dagsolvers.utils import log_exceptions
 from dagsolvers import (
-    solve_exmag,
-    solve_gobnilp,
+    # solve_exmag,
+    # solve_gobnilp,
     solve_milp,
     solve_milp_clique,
     solve_milp_cliquewidth,
@@ -730,120 +730,120 @@ def start_experiment(cfg: DictConfig) -> None:
                 run.log_metric('cycle_lazy_added', lazy_breakdown.get('cycle_lazy_count', 0))
                 run.log_metric('clique_lazy_added', lazy_breakdown.get('clique_lazy_count', 0))
                 run.log_metric('clique_user_added', lazy_breakdown.get('clique_user_count', 0))
-        elif cfg.solver.name == "exmag":
-            callback_mode = cfg.solver.callback_mode
-            robust = cfg.solver.robust
-            weights_bound = cfg.solver.weights_bound
-            reg_type = cfg.solver.reg_type
-            run.log_param('reg_type', reg_type)
-            a_reg_type = cfg.solver.a_reg_type
-            run.log_param('a_reg_type', a_reg_type)
-            target_mip_gap = cfg.solver.target_mip_gap
-            run.log_param('target_mip_gap', target_mip_gap)
-            run.log_param('robust', robust)
-            run.log_param('callback_mode', callback_mode)
-            run.log_param('weights_bound', weights_bound)
+        # elif cfg.solver.name == "exmag":
+        #     callback_mode = cfg.solver.callback_mode
+        #     robust = cfg.solver.robust
+        #     weights_bound = cfg.solver.weights_bound
+        #     reg_type = cfg.solver.reg_type
+        #     run.log_param('reg_type', reg_type)
+        #     a_reg_type = cfg.solver.a_reg_type
+        #     run.log_param('a_reg_type', a_reg_type)
+        #     target_mip_gap = cfg.solver.target_mip_gap
+        #     run.log_param('target_mip_gap', target_mip_gap)
+        #     run.log_param('robust', robust)
+        #     run.log_param('callback_mode', callback_mode)
+        #     run.log_param('weights_bound', weights_bound)
 
-            exmag_version = cfg.solver.get('exmag_version', 'version0')
+        #     # exmag_version = cfg.solver.get('exmag_version', 'version0')
 
-            if exmag_version == 'version0':
-                W_est, W_bi_est, gap, lazy_count, stats = solve_exmag.solve(X, cfg.solver.lambda1, cfg.solver.loss_type, reg_type,
-                                                                       cfg.solver.nonzero_threshold, tabu_edges=tabu_edges if cfg.solver.tabu_edges else {},
-                                                                       B_ref=B_true, mode=callback_mode,
-                                                                       time_limit=cfg.solver.time_limit,
-                                                                       robust=robust, weights_bound=weights_bound)
-            elif exmag_version == 'version2':
-                from dagsolvers import solve_exmag_2
-                W_est, W_bi_est, gap, lazy_count, stats = solve_exmag_2.solve(X, cfg.solver.lambda1, cfg.solver.loss_type,
-                                                                            reg_type,
-                                                                            cfg.solver.nonzero_threshold,
-                                                                            tabu_edges=tabu_edges if cfg.solver.tabu_edges else {},
-                                                                            B_ref=B_true, mode=callback_mode,
-                                                                            time_limit=cfg.solver.time_limit,
-                                                                            robust=robust, weights_bound=weights_bound)
+        #     # if exmag_version == 'version0':
+        #     #     W_est, W_bi_est, gap, lazy_count, stats = solve_exmag.solve(X, cfg.solver.lambda1, cfg.solver.loss_type, reg_type,
+        #     #                                                            cfg.solver.nonzero_threshold, tabu_edges=tabu_edges if cfg.solver.tabu_edges else {},
+        #     #                                                            B_ref=B_true, mode=callback_mode,
+        #     #                                                            time_limit=cfg.solver.time_limit,
+        #     #                                                            robust=robust, weights_bound=weights_bound)
+        #     # elif exmag_version == 'version2':
+        #     #     from dagsolvers import solve_exmag_2
+        #     #     W_est, W_bi_est, gap, lazy_count, stats = solve_exmag_2.solve(X, cfg.solver.lambda1, cfg.solver.loss_type,
+        #     #                                                                 reg_type,
+        #     #                                                                 cfg.solver.nonzero_threshold,
+        #     #                                                                 tabu_edges=tabu_edges if cfg.solver.tabu_edges else {},
+        #     #                                                                 B_ref=B_true, mode=callback_mode,
+        #     #                                                                 time_limit=cfg.solver.time_limit,
+        #     #                                                                 robust=robust, weights_bound=weights_bound)
 
-            B_est = (W_est != 0).astype(int)
-            B_bi_est = (W_bi_est != 0).astype(int)
-            A_est = []
-            # (X, lambda1, loss_type, reg_type, w_threshold, tabu_edges={}, B_ref=None, mode='shortest_cycle',
-            #           time_limit=300, robust=False, weights_bound=100.0, constraints_mode='weights')
-            if W_est is None:
-                run.log_text(f'Error: Gurobi has not found a solution', 'error.txt')
-                run.log_metric('infeasible', True)
-                return
-            if stats:
-                table_data = {}
-                table_data['Time'] = [s[0] for s in stats]
-                table_data['Def_thresh_SHD'] = [s[1] for s in stats]
-                table_data['Best_SHD'] = [s[2] for s in stats]
-                table_data['Best_threshold'] = [s[3] for s in stats]
-                table_data['Objective_val'] = [s[4] for s in stats]
-                table_data['Dag_t'] = [s[5] for s in stats]
-                run.log_table(table_data, 'solving_progress.json')
-            run.log_metric('mipgap', gap)
-            run.log_metric('lazy_added', lazy_count)
-        elif cfg.solver.name == 'gobnilp':
-            palim = cfg.solver.get('palim')
-            run.log_param('palim', palim)
-            print('palim')
-            print(palim)
-            W_est = solve_gobnilp.solve(X, cfg.solver)
-            A_est = []
-        elif cfg.solver.name == 'ip4ancadmg':
-            from dagsolvers.solvers.IP4AncADMG.solver_ip4ancadmg import solve_ip4ancadmg
-            B_est, B_bi_est = solve_ip4ancadmg(X, cfg.solver)
-            W_est = B_est
-            W_bi_est = B_bi_est
-            A_est = []
-        elif cfg.solver.name == 'ipbm':
-            B_est, B_bi_est = solve_ipbm(X, cfg.solver)
-            W_est = B_est
-            W_bi_est = B_bi_est
-            A_est = []
-        elif cfg.solver.name == 'micodag':
-            # pip install micodag
-            import dagsolvers.solvers.micpnid as mic
-            moral = [(i+1,j+1) for i in range(d) for j in range(d) if i!=j]
-            RGAP, W_est, _, obj, _ = mic.optimize(X, moral, cfg.solver.lambda1, timelimit = cfg.solver.time_limit / d)
-            run.log_metric('objective_value', obj)
-            run.log_metric('mipgap', RGAP)
-            A_est = []
-        elif cfg.solver.name == 'notears':
-            W_est = linear.notears_linear(X, cfg.solver.lambda1, cfg.solver.loss_type, w_threshold=cfg.solver.nonzero_threshold) # Does not work well with 0.
-            B_est = (W_est != 0).astype(int)
-            A_est = []
-        elif cfg.solver.name == 'sortnregress':
-            W_est = sortnregress(X)
-            A_est = []
-        elif cfg.solver.name == 'dagma':
-            from solve_dagma import solve_dagma
-            W_est, solver_runtime, solver_iterations, solver_outer_iterations, solver_hit_time_limit = solve_dagma(X, cfg.solver)
-            A_est = []
-        elif cfg.solver.name == 'fci':
-            B_est, B_bi_est = solve_fci(X)
-            W_est = None
-            W_bi_est = None
-            A_est = []
-        elif cfg.solver.name == 'boss':
-            from solve_boss import solve_boss
-            W_est = solve_boss(X, output_dir, cfg.solver.cmd)
-            A_est = []
-        elif cfg.solver.name == 'lingam':
-            from solve_lingam import solve_lingam
-            W_est, A_est = solve_lingam(X, Y, p)
-        elif cfg.solver.name == 'nts_notears':
-            from solve_nts_notears import solve_nts_notears
-            W_est, A_est = solve_nts_notears(X, Y, p, cfg.solver)
-        elif cfg.solver.name == 'dynotears':
-            X_lag = np.concatenate(Y, axis=1)
-            _, W_est, A_est_concated = from_numpy_dynamic(X,X_lag, w_threshold=cfg.solver.nonzero_threshold, lambda_w=cfg.solver.lambda1, lambda_a=cfg.solver.lambda2)
-            A_est = []
-            for lag in range(p): # range(1, p + 1):
-                #idxs = [f'_lag{lag}' in c for c in inter_nodes]
-                idxs = list(range(d*lag, d*(lag+1)))
-                A_est_lag = A_est_concated[idxs,:]
-                A_est.append(A_est_lag)
-            #print(A_est)
+        #     B_est = (W_est != 0).astype(int)
+        #     B_bi_est = (W_bi_est != 0).astype(int)
+        #     A_est = []
+        #     # (X, lambda1, loss_type, reg_type, w_threshold, tabu_edges={}, B_ref=None, mode='shortest_cycle',
+        #     #           time_limit=300, robust=False, weights_bound=100.0, constraints_mode='weights')
+        #     if W_est is None:
+        #         run.log_text(f'Error: Gurobi has not found a solution', 'error.txt')
+        #         run.log_metric('infeasible', True)
+        #         return
+        #     if stats:
+        #         table_data = {}
+        #         table_data['Time'] = [s[0] for s in stats]
+        #         table_data['Def_thresh_SHD'] = [s[1] for s in stats]
+        #         table_data['Best_SHD'] = [s[2] for s in stats]
+        #         table_data['Best_threshold'] = [s[3] for s in stats]
+        #         table_data['Objective_val'] = [s[4] for s in stats]
+        #         table_data['Dag_t'] = [s[5] for s in stats]
+        #         run.log_table(table_data, 'solving_progress.json')
+        #     run.log_metric('mipgap', gap)
+        #     run.log_metric('lazy_added', lazy_count)
+        # elif cfg.solver.name == 'gobnilp':
+        #     palim = cfg.solver.get('palim')
+        #     run.log_param('palim', palim)
+        #     print('palim')
+        #     print(palim)
+        #     W_est = solve_gobnilp.solve(X, cfg.solver)
+        #     A_est = []
+        # elif cfg.solver.name == 'ip4ancadmg':
+        #     from dagsolvers.solvers.IP4AncADMG.solver_ip4ancadmg import solve_ip4ancadmg
+        #     B_est, B_bi_est = solve_ip4ancadmg(X, cfg.solver)
+        #     W_est = B_est
+        #     W_bi_est = B_bi_est
+        #     A_est = []
+        # elif cfg.solver.name == 'ipbm':
+        #     B_est, B_bi_est = solve_ipbm(X, cfg.solver)
+        #     W_est = B_est
+        #     W_bi_est = B_bi_est
+        #     A_est = []
+        # elif cfg.solver.name == 'micodag':
+        #     # pip install micodag
+        #     import dagsolvers.solvers.micpnid as mic
+        #     moral = [(i+1,j+1) for i in range(d) for j in range(d) if i!=j]
+        #     RGAP, W_est, _, obj, _ = mic.optimize(X, moral, cfg.solver.lambda1, timelimit = cfg.solver.time_limit / d)
+        #     run.log_metric('objective_value', obj)
+        #     run.log_metric('mipgap', RGAP)
+        #     A_est = []
+        # elif cfg.solver.name == 'notears':
+        #     W_est = linear.notears_linear(X, cfg.solver.lambda1, cfg.solver.loss_type, w_threshold=cfg.solver.nonzero_threshold) # Does not work well with 0.
+        #     B_est = (W_est != 0).astype(int)
+        #     A_est = []
+        # elif cfg.solver.name == 'sortnregress':
+        #     W_est = sortnregress(X)
+        #     A_est = []
+        # elif cfg.solver.name == 'dagma':
+        #     from solve_dagma import solve_dagma
+        #     W_est, solver_runtime, solver_iterations, solver_outer_iterations, solver_hit_time_limit = solve_dagma(X, cfg.solver)
+        #     A_est = []
+        # elif cfg.solver.name == 'fci':
+        #     B_est, B_bi_est = solve_fci(X)
+        #     W_est = None
+        #     W_bi_est = None
+        #     A_est = []
+        # elif cfg.solver.name == 'boss':
+        #     from solve_boss import solve_boss
+        #     W_est = solve_boss(X, output_dir, cfg.solver.cmd)
+        #     A_est = []
+        # elif cfg.solver.name == 'lingam':
+        #     from solve_lingam import solve_lingam
+        #     W_est, A_est = solve_lingam(X, Y, p)
+        # elif cfg.solver.name == 'nts_notears':
+        #     from solve_nts_notears import solve_nts_notears
+        #     W_est, A_est = solve_nts_notears(X, Y, p, cfg.solver)
+        # elif cfg.solver.name == 'dynotears':
+        #     X_lag = np.concatenate(Y, axis=1)
+        #     _, W_est, A_est_concated = from_numpy_dynamic(X,X_lag, w_threshold=cfg.solver.nonzero_threshold, lambda_w=cfg.solver.lambda1, lambda_a=cfg.solver.lambda2)
+        #     A_est = []
+        #     for lag in range(p): # range(1, p + 1):
+        #         #idxs = [f'_lag{lag}' in c for c in inter_nodes]
+        #         idxs = list(range(d*lag, d*(lag+1)))
+        #         A_est_lag = A_est_concated[idxs,:]
+        #         A_est.append(A_est_lag)
+        #     #print(A_est)
         else:
             assert False
         solving_duration = time.time() - start_time

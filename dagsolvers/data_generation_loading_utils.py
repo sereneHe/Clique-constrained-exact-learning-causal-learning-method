@@ -5,7 +5,7 @@ import networkx as nx
 import numpy as np
 from omegaconf import DictConfig
 
-from dagsolvers import sachs_utils, krebs_utils, admg_generators
+# from dagsolvers import sachs_utils, krebs_utils, admg_generators
 from dagsolvers.dagsolver_utils import ExDagDataException
 from notears import utils
 
@@ -359,73 +359,73 @@ def load_problem(cfg: DictConfig, run):
     tabu_edges = []
     intra_nodes = None
     inter_nodes = None #TODO: all problems should define this
-    if graph_type == 'cds':
-        from dagsolvers import cds_utils
-        W_true, B_true, A_true, B_lags_true, X, Y, intra_nodes, inter_nodes, tabu_edges = cds_utils.load_data(cfg.problem.n, cfg.problem.granularity, cfg.problem.p, cfg.problem.data_path)
-        W_bi_true = np.zeros_like(W_true)
-        B_bi_true = np.zeros_like(B_true)
-    elif graph_type == 'codiet':
-        from dagsolvers import codiet_utils
-        W_true, B_true, A_true, B_lags_true, X, Y, intra_nodes, inter_nodes, tabu_edges = codiet_utils.load_data(cfg.problem)
-        W_bi_true = np.zeros_like(W_true)
-        B_bi_true = np.zeros_like(B_true)
-    elif graph_type == 'krebs':
-        p = cfg.problem.p
-        measurements = cfg.problem.measurements
-        variant = cfg.problem.variant
-        #run.log_param('measurements', measurements)
-        #run.log_param('variant', variant)
-        W_true, B_true, A_true, B_lags_true, X, Y, X_lag, intra_nodes, inter_nodes = krebs_utils.load_data(variant, measurements, p, cfg.problem.data_path)
-        W_bi_true = None
-        B_bi_true = None
-        #n, d = X.shape
+    # if graph_type == 'cds':
+    #     from dagsolvers import cds_utils
+    #     W_true, B_true, A_true, B_lags_true, X, Y, intra_nodes, inter_nodes, tabu_edges = cds_utils.load_data(cfg.problem.n, cfg.problem.granularity, cfg.problem.p, cfg.problem.data_path)
+    #     W_bi_true = np.zeros_like(W_true)
+    #     B_bi_true = np.zeros_like(B_true)
+    # elif graph_type == 'codiet':
+    #     from dagsolvers import codiet_utils
+    #     W_true, B_true, A_true, B_lags_true, X, Y, intra_nodes, inter_nodes, tabu_edges = codiet_utils.load_data(cfg.problem)
+    #     W_bi_true = np.zeros_like(W_true)
+    #     B_bi_true = np.zeros_like(B_true)
+    # elif graph_type == 'krebs':
+    #     p = cfg.problem.p
+    #     measurements = cfg.problem.measurements
+    #     variant = cfg.problem.variant
+    #     #run.log_param('measurements', measurements)
+    #     #run.log_param('variant', variant)
+    #     W_true, B_true, A_true, B_lags_true, X, Y, X_lag, intra_nodes, inter_nodes = krebs_utils.load_data(variant, measurements, p, cfg.problem.data_path)
+    #     W_bi_true = None
+    #     B_bi_true = None
+    #     #n, d = X.shape
 
-    elif graph_type == 'Sachs':
-        variant = cfg.problem.variant
-        #run.log_param('variant', variant)
-        #normalize = cfg.problem.get('normalize')
-        #run.log_param('normalize', normalize)
-        X, B_true, W_true = sachs_utils.load_data(variant, False, cfg.problem.data_path)
-        # n, d = X.shape
-        # p = 0
-        Y = []
-        A_true = []
-        B_lags_true = []
-        W_bi_true = None
-        B_bi_true = None
+    # elif graph_type == 'Sachs':
+    #     variant = cfg.problem.variant
+    #     #run.log_param('variant', variant)
+    #     #normalize = cfg.problem.get('normalize')
+    #     #run.log_param('normalize', normalize)
+    #     X, B_true, W_true = sachs_utils.load_data(variant, False, cfg.problem.data_path)
+    #     # n, d = X.shape
+    #     # p = 0
+    #     Y = []
+    #     A_true = []
+    #     B_lags_true = []
+    #     W_bi_true = None
+    #     B_bi_true = None
 
-    elif graph_type == 'bnlearn' or graph_type == 'nips2023':
-        #run.log_param('variant', cfg.problem.variant)
-        if graph_type == 'bnlearn':
-            n = cfg.problem.get('number_of_samples')
-            # normalize = cfg.problem.get('normalize', False)
-            # run.log_param('normalize', normalize)
-            from dagsolvers import bnlearn_utils
-            X, W_true = bnlearn_utils.load_dataset(cfg.problem.variant, n=n, normalize=False)
-        elif graph_type == 'nips2023':
-            from dagsolvers import nips_comp_utils
-            X, W_true = nips_comp_utils.load_dataset(cfg.problem.variant, cfg.problem.data_path)
-        else:
-            assert False
-        B_true = W_true
-        # n, d = X.shape
-        # p = 0
-        Y = []
-        A_true = []
-        B_lags_true = []
-        W_bi_true = None
-        B_bi_true = None
+    # elif graph_type == 'bnlearn' or graph_type == 'nips2023':
+    #     #run.log_param('variant', cfg.problem.variant)
+    #     if graph_type == 'bnlearn':
+    #         n = cfg.problem.get('number_of_samples')
+    #         # normalize = cfg.problem.get('normalize', False)
+    #         # run.log_param('normalize', normalize)
+    #         from dagsolvers import bnlearn_utils
+    #         X, W_true = bnlearn_utils.load_dataset(cfg.problem.variant, n=n, normalize=False)
+    #     elif graph_type == 'nips2023':
+    #         from dagsolvers import nips_comp_utils
+    #         X, W_true = nips_comp_utils.load_dataset(cfg.problem.variant, cfg.problem.data_path)
+    #     else:
+    #         assert False
+    #     B_true = W_true
+    #     # n, d = X.shape
+    #     # p = 0
+    #     Y = []
+    #     A_true = []
+    #     B_lags_true = []
+    #     W_bi_true = None
+    #     B_bi_true = None
 
-    elif normalized_graph_type in {'child', 'insurance', 'alarm'}:
-        X, W_true, intra_nodes = _load_categorical_bn_benchmark(cfg)
-        B_true = (W_true != 0).astype(int)
-        Y = []
-        A_true = []
-        B_lags_true = []
-        W_bi_true = None
-        B_bi_true = None
+    # elif normalized_graph_type in {'child', 'insurance', 'alarm'}:
+    #     X, W_true, intra_nodes = _load_categorical_bn_benchmark(cfg)
+    #     B_true = (W_true != 0).astype(int)
+    #     Y = []
+    #     A_true = []
+    #     B_lags_true = []
+    #     W_bi_true = None
+    #     B_bi_true = None
 
-    elif graph_type == 'dynamic' or normalized_graph_type in {'er', 'sf', 'path', 'pathperm', 'g2', 'cliquefree_er', 'cliquefree_sf'}:
+    if graph_type == 'dynamic' or normalized_graph_type in {'er', 'sf', 'path', 'pathperm', 'g2', 'cliquefree_er', 'cliquefree_sf'}:
         if _use_dynamic_generation(graph_type, normalized_graph_type, cfg):
             W_true, W_bi_true, B_true, B_bi_true, A_true, B_lags_true, X, Y, tabu_edges, intra_nodes, inter_nodes = _simulate_dynamic_problem(
                 cfg, run, graph_type, normalized_graph_type
@@ -435,95 +435,95 @@ def load_problem(cfg: DictConfig, run):
                 cfg, run, graph_type, normalized_graph_type, tabu_edges
             )
 
-    elif graph_type == 'ermag':
-        d = cfg.problem.number_of_variables
-        n = cfg.problem.number_of_samples
-        edge_ratio = cfg.problem.get('edge_ratio', 1)
-        run.log_param('edge_ratio', edge_ratio)
-        s0 = edge_ratio * d
-        sem_type = cfg.problem.sem_type
-        noise_scale = cfg.problem.get('noise_scale', 1.0)
-        tabu_edges_ratio = cfg.problem.get('tabu_edges_ratio', 0.2)
-        hidden_vertices_ratio = cfg.problem.get('hidden_vertices_ratio', 0.2)
-        run.log_param('sem_type', sem_type)
-        run.log_param('noise_scale', noise_scale)
-        try:
-            B_true = utils.simulate_dag(d, s0, "ER")
-        except Exception as e:
-            run.log_text(f'Error: Cannot generate samples data. Exception: {e}', 'error.txt')
-            run.log_metric('infeasible', True)
-            raise ExDagDataException(e)
+    # elif graph_type == 'ermag':
+    #     d = cfg.problem.number_of_variables
+    #     n = cfg.problem.number_of_samples
+    #     edge_ratio = cfg.problem.get('edge_ratio', 1)
+    #     run.log_param('edge_ratio', edge_ratio)
+    #     s0 = edge_ratio * d
+    #     sem_type = cfg.problem.sem_type
+    #     noise_scale = cfg.problem.get('noise_scale', 1.0)
+    #     tabu_edges_ratio = cfg.problem.get('tabu_edges_ratio', 0.2)
+    #     hidden_vertices_ratio = cfg.problem.get('hidden_vertices_ratio', 0.2)
+    #     run.log_param('sem_type', sem_type)
+    #     run.log_param('noise_scale', noise_scale)
+    #     try:
+    #         B_true = utils.simulate_dag(d, s0, "ER")
+    #     except Exception as e:
+    #         run.log_text(f'Error: Cannot generate samples data. Exception: {e}', 'error.txt')
+    #         run.log_metric('infeasible', True)
+    #         raise ExDagDataException(e)
 
-        if cfg.problem.get('only_01', False):
-            W_true = B_true
-        elif cfg.problem.get('only_positive', False):
-            W_true = utils.simulate_parameter(B_true, w_ranges=((0.5, 2.0),))
-        else:
-            W_true = utils.simulate_parameter(B_true)
-        X = utils.simulate_linear_sem(W_true, n, sem_type, noise_scale=noise_scale)
-        Y = []
-        A_true = []
-        B_lags_true = []
+    #     if cfg.problem.get('only_01', False):
+    #         W_true = B_true
+    #     elif cfg.problem.get('only_positive', False):
+    #         W_true = utils.simulate_parameter(B_true, w_ranges=((0.5, 2.0),))
+    #     else:
+    #         W_true = utils.simulate_parameter(B_true)
+    #     X = utils.simulate_linear_sem(W_true, n, sem_type, noise_scale=noise_scale)
+    #     Y = []
+    #     A_true = []
+    #     B_lags_true = []
 
 
-        # p = 0
+    #     # p = 0
 
-        new_d = int(d * (1-hidden_vertices_ratio))
-        indices = np.random.choice(range(d), size=new_d, replace=False)
-        d = new_d
-        X = X[:, indices]
-        W_true = W_true[np.ix_(indices, indices)]
-        B_true = B_true[np.ix_(indices, indices)]
-        B_bi_true = np.zeros_like(B_true)
-        for i in range(d):
-            for j in range(i):
-                if W_true[i, j] == 0.0 and W_true[j, i] == 0.0:
-                    if np.random.rand() < tabu_edges_ratio:
-                        tabu_edges.append((i, j))
-                        B_bi_true[i, j] = 1.0
-                        B_bi_true[j, i] = 1.0 # Maybe dubious.
+    #     new_d = int(d * (1-hidden_vertices_ratio))
+    #     indices = np.random.choice(range(d), size=new_d, replace=False)
+    #     d = new_d
+    #     X = X[:, indices]
+    #     W_true = W_true[np.ix_(indices, indices)]
+    #     B_true = B_true[np.ix_(indices, indices)]
+    #     B_bi_true = np.zeros_like(B_true)
+    #     for i in range(d):
+    #         for j in range(i):
+    #             if W_true[i, j] == 0.0 and W_true[j, i] == 0.0:
+    #                 if np.random.rand() < tabu_edges_ratio:
+    #                     tabu_edges.append((i, j))
+    #                     B_bi_true[i, j] = 1.0
+    #                     B_bi_true[j, i] = 1.0 # Maybe dubious.
 
-        W_bi_true = np.copy(B_bi_true)
+    #     W_bi_true = np.copy(B_bi_true)
 
-    elif graph_type == 'bowfree_admg':
-        B_true, B_bi_true, tabu_edges, X = admg_generators.generate_graph_and_samples(cfg.problem.number_of_variables,cfg.problem.pdir, cfg.problem.pbidir, cfg.problem.max_in_arrows, cfg.problem.number_of_samples, cfg.problem.enforce_mag)
-        W_true = B_true
-        W_bi_true = B_bi_true
-        Y = []
-        A_true = []
-        B_lags_true = []
+    # elif graph_type == 'bowfree_admg':
+    #     B_true, B_bi_true, tabu_edges, X = admg_generators.generate_graph_and_samples(cfg.problem.number_of_variables,cfg.problem.pdir, cfg.problem.pbidir, cfg.problem.max_in_arrows, cfg.problem.number_of_samples, cfg.problem.enforce_mag)
+    #     W_true = B_true
+    #     W_bi_true = B_bi_true
+    #     Y = []
+    #     A_true = []
+    #     B_lags_true = []
 
-    elif graph_type == 'admissions':
-        import pandas as pd
-        from sklearn.preprocessing import LabelEncoder
-        file_path = cfg.problem.data_path
-        df = pd.read_csv(file_path, sep=';')
-        encoder = LabelEncoder()
-        for col in ['gender', 'admit']:
-            df[col] = encoder.fit_transform(df[col])
-        #del df['gender']
-        #df['gender'] = df['gender']
-        #df['admit'] = 2 * df['admit']
-        df = pd.get_dummies(df, columns=['department'], prefix='D', dtype=int)
-        # for col in df.columns:
-        #     if 'department' in col:
-        #         df[col] = df[col] * 0.5
-        # print(df.to_string())
+    # elif graph_type == 'admissions':
+    #     import pandas as pd
+    #     from sklearn.preprocessing import LabelEncoder
+    #     file_path = cfg.problem.data_path
+    #     df = pd.read_csv(file_path, sep=';')
+    #     encoder = LabelEncoder()
+    #     for col in ['gender', 'admit']:
+    #         df[col] = encoder.fit_transform(df[col])
+    #     #del df['gender']
+    #     #df['gender'] = df['gender']
+    #     #df['admit'] = 2 * df['admit']
+    #     df = pd.get_dummies(df, columns=['department'], prefix='D', dtype=int)
+    #     # for col in df.columns:
+    #     #     if 'department' in col:
+    #     #         df[col] = df[col] * 0.5
+    #     # print(df.to_string())
 
-        X = df.to_numpy()
-        intra_nodes = df.columns.tolist()
+    #     X = df.to_numpy()
+    #     intra_nodes = df.columns.tolist()
 
-        W_true = np.zeros((X.shape[1], X.shape[1]))
-        B_true = np.zeros((X.shape[1], X.shape[1]))
-        A_true = []
-        B_lags_true = []
-        Y = []
-        W_bi_true = np.zeros((X.shape[1], X.shape[1]))
-        B_bi_true = np.zeros((X.shape[1], X.shape[1]))
-        tabu_edges = [(0,1),(1,0)]
+    #     W_true = np.zeros((X.shape[1], X.shape[1]))
+    #     B_true = np.zeros((X.shape[1], X.shape[1]))
+    #     A_true = []
+    #     B_lags_true = []
+    #     Y = []
+    #     W_bi_true = np.zeros((X.shape[1], X.shape[1]))
+    #     B_bi_true = np.zeros((X.shape[1], X.shape[1]))
+    #     tabu_edges = [(0,1),(1,0)]
     
-    elif graph_type == 'load_from_file':
-        assert False, 'implement me'
+    # elif graph_type == 'load_from_file':
+    #     assert False, 'implement me'
 
     else:
         assert False, 'unknown problem'

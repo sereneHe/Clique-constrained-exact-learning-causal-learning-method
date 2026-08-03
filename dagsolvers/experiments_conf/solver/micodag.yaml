@@ -1,4 +1,0 @@
-name: micodag
-lambda1: 1.0
-loss_type: l2
-time_limit: 50
