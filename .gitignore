@@ -32,3 +32,9 @@ dagsolvers/logs/
 dagsolvers/outputs/
 dagsolvers/reports/
 dagsolvers/metacentrum_runs/
+
+# Generated execution traces excluded from published result snapshots
+**/multirun/
+**/mlruns/
+**/log/
+**/logs/

@@ -1,0 +1,2 @@
+dataset,features,samples,timelimit,degree,runtime_seconds,gap,fdr,tpr,fpr,shd,nnz,precision,f1score,g_score,lazy_count,degree_std,runtime_seconds_std,gap_std,fdr_std,tpr_std,fpr_std,shd_std,nnz_std,precision_std,f1score_std,g_score_std,lazy_count_std
+static_cliquefree-er-2-0_gauss_d6_n50,6,50,2.0,1.0,0.3024899959564209,0.0099522347427346,0.1,0.75,0.0104166666666666,2.5,10.0,0.9,0.8181818181818182,0.6666666666666666,45.0,,,,,,,,,,,,
