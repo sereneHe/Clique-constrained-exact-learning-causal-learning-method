@@ -6,8 +6,8 @@
 
 set -euo pipefail
 
-PROJECT=/storage/praha1/home/hexiaoyu/project-bestdagsolverintheworld
-WORK=$SCRATCHDIR/project-bestdagsolverintheworld
+PROJECT=/storage/praha1/home/hexiaoyu/project-bestdagsolverintheworld-test
+WORK=$SCRATCHDIR/project-bestdagsolverintheworld-test
 OUT=$PROJECT/metacentrum_runs/$PBS_JOBID
 
 echo "Job $PBS_JOBID started at $(date)"
@@ -17,6 +17,7 @@ echo "Scratch: $SCRATCHDIR"
 mkdir -p "$OUT"
 
 SYNC_PID=""
+SYNC_INTERVAL_SECONDS=300
 
 sync_outputs() {
   mkdir -p "$OUT/dagsolvers"
@@ -39,11 +40,11 @@ trap finish EXIT
 
 module add python
 
-source "$PROJECT/.venv/bin/activate"
+source /storage/praha1/home/hexiaoyu/project-bestdagsolverintheworld/.venv/bin/activate
 
 rsync -a \
   --exclude .git \
-  --exclude .venv \
+  --exclude '.venv*' \
   --exclude metacentrum_runs \
   --exclude dagsolvers/multirun \
   --exclude dagsolvers/mlruns \
@@ -58,6 +59,9 @@ export HYDRA_FULL_ERROR=1
 export MLFLOW_ALLOW_FILE_STORE=true
 export GRB_LICENSE_FILE=/storage/praha1/home/hexiaoyu/gurobi.lic
 export KMP_DUPLICATE_LIB_OK=TRUE
+# Write A--G tables into this job's scratch results tree.  The background
+# rsync publishes that tree every five minutes under metacentrum_runs/$PBS_JOBID.
+export EXDBN_STATIC_CSV_BASE_DIR="$WORK/dagsolvers/results"
 
 export OMP_NUM_THREADS=2
 export MKL_NUM_THREADS=2
@@ -70,11 +74,12 @@ echo "PYTHONPATH=$PYTHONPATH"
 
 while true; do
   sync_outputs
-  sleep 300
+  sleep "$SYNC_INTERVAL_SECONDS"
 done &
 SYNC_PID=$!
-echo "Background output sync started with PID $SYNC_PID"
+echo "Background output sync started with PID $SYNC_PID (interval ${SYNC_INTERVAL_SECONDS}s)"
 
-bash scripts/experiments_exdbn_clique.sh
+# bash scripts/experiments_exdbn_clique.sh
+bash scripts/Test.sh
 
 echo "Job $PBS_JOBID finished at $(date)"

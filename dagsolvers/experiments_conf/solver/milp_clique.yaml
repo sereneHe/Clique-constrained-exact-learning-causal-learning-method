@@ -11,8 +11,8 @@ clique_callback_mode: all_cliques
 max_clique_size: 5
 # Single switch for callback/root/progress/final experiment diagnostics.
 # With false, the solver follows the original output behavior.
-experiment_diagnostics: true
-print_clique_cuts: false
+experiment_diagnostics: false
+print_clique_cuts: true
 enable_cycle_constraints: true
 enable_clique_constraints: true
 separation_order: cycle_first
@@ -34,53 +34,3 @@ tabu_edges: false
 weights_bound: 100.0
 time_limit: 1800
 target_mip_gap: 0.01
-
-# Unified BASE/A--G switches.  Keeping every feature disabled reproduces the
-# original cliquewidth/MILP-clique callback.
-experiment_variant: BASE
-enable_delayed_separation: false
-dense_escalation_hits: 2
-clique_separation_time_budget: 0.02
-
-# B/F: controlled addition and stronger clique inequalities.
-# original uses clique_callback_mode; alternatives are maximal/k_plus_1 and
-# first/all/most_violated/history/top_k/top_k_diverse.
-clique_cut_formulation: original
-clique_cut_selection: original
-clique_cut_top_k: 5
-max_cut_jaccard_similarity: 0.8
-
-# C: repair rejected integer candidates and submit a heuristic incumbent.
-enable_incumbent_repair: false
-repair_variant: C5
-repair_refit_solver: auto
-repair_deletion_score: violation_loss
-repair_violation_weight: 1.0
-repair_loss_weight: 1.0
-repair_max_retries: 2
-repair_ridge_alpha: 0.001
-repair_cut_cache_mode: off
-repair_cut_cache_dir: repair_cut_cache
-
-# D: fractional clique separation at MIPNODE through cbCut().
-enable_fractional_separation: false
-fractional_variant: D2
-fractional_greedy_starts: 10
-fractional_separation_time_budget: 0.02
-fractional_max_zero_rounds: 3
-dense_history_min_hits: 2
-
-# E: scalar Big-M or edge-specific M_ij.
-big_m_mode: scalar
-edge_specific_safety_factor: 1.01
-edge_specific_condition_limit: 1.0e10
-big_m_saturation_tolerance: 0.98
-
-# G: one continuous solve with explicit progress snapshots.
-enable_checkpoints: false
-checkpoint_times: [5, 60, 120, 300, 600, 1200, 1800, 2700, 3600, 5400, 7200]
-
-# Optional diagnostics output controls.
-diagnostics_output_dir: .
-print_callback_events: true
-print_retained_solutions: false

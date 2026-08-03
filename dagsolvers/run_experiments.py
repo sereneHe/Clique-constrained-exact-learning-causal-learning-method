@@ -41,7 +41,13 @@ from dagsolvers import (
     solve_gobnilp,
     solve_milp,
     solve_milp_clique,
-    solve_milp_cliquewidth,
+    solve_delayed_separation,
+    solve_controlled_cut_addition,
+    solve_repair_incumbent,
+    solve_fractional_separation,
+    solve_bigm_relaxation,
+    solve_stronger_clique_cuts,
+    solve_time_limit_optimization,
     solve_milp_edge_limit,
 )
 import dagsolvers.tracking_utils as tu
@@ -56,7 +62,7 @@ DEFAULT_MULTIRUN_ROOT = PROJECT_DIR / 'multirun'
 
 
 STATIC_RUNTIME_COLUMNS = [
-    'method', 'method_variant', 'experiment',
+    'method_variant', 'experiment',
     'dataset', 'features', 'samples', 'p', 'edge_ratio', 'degree',
     'ori_graph_density', 'after_cliquefree_density', 'true_linear_r2',
     'big_m', 'runtime_seconds', 'gap', 'shd', 'f1score',
@@ -86,25 +92,10 @@ STATIC_RUNTIME_COLUMNS = [
     'best_incumbent_edges', 'best_incumbent_weights', 'W_true_path', 'run_dir',
 ]
 
-COMPACT_RUNTIME_COLUMNS = [
-    'method', 'dataset', 'features', 'samples', 'p', 'edge_ratio', 'degree',
-    'ori_graph_density', 'after_cliquefree_density', 'true_linear_r2', 'big_m',
-    'runtime_seconds', 'gap', 'fdr', 'tpr', 'fpr', 'shd', 'nnz',
-    'precision', 'f1score', 'g_score', 'lazy_count',
-    'cycle_lazy_count', 'clique_lazy_count', 'clique_user_count',
-]
-
 CLIQUE_FAMILY_SOLVERS = {
-    'milp_clique',
-    'milp_cliquewidth',
-}
-
-CLIQUE_EXPERIMENT_FILE_LABELS = {
-    'B1-first_min_k+1-F2-first_k+1_cut': 'B1-F2',
-    'B3-most_violated_k+1': 'B3',
-    'C3-local_LS_QR_repair': 'C3',
-    'C5-validated_auto_refit_retry': 'C5',
-    'E2-big_M_20': 'E2',
+    'milp_clique', 'delayed_separation', 'controlled_cut_addition',
+    'repair_incumbent', 'fractional_separation', 'bigm_relaxation',
+    'stronger_clique_cuts', 'time_limit_optimization',
 }
 
 
@@ -112,16 +103,12 @@ def _env_flag(name):
     return os.getenv(name, '').strip().lower() in {'1', 'true', 'yes', 'on'}
 
 
-def _static_runtime_prefix(cfg):
-    solver_name = str(cfg.solver.name)
+def _static_runtime_prefix(solver_name):
     if solver_name == 'milp':
         return 'runtime_'
     if solver_name == 'dagma':
         return 'dagma_runtime_'
     if solver_name in CLIQUE_FAMILY_SOLVERS:
-        case_label = CLIQUE_EXPERIMENT_FILE_LABELS.get(str(cfg.experiment))
-        if case_label:
-            return f'clique_{case_label}_runtime_'
         return 'clique_runtime_'
     if solver_name == 'edge_limit':
         return 'limit_runtime_'
@@ -178,23 +165,20 @@ def _static_solver_suffix(cfg):
     return f'{time_limit}s_{max_clique_size}clique'
 
 
-def _ensure_static_runtime_columns(path, target_columns):
+def _ensure_static_runtime_columns(path):
     if not path.exists():
         return
     with path.open(newline='') as handle:
         reader = csv.DictReader(handle)
         fieldnames = reader.fieldnames or []
         rows = list(reader)
-    if fieldnames == target_columns:
+    if fieldnames == STATIC_RUNTIME_COLUMNS:
         return
     legacy_aliases = {
         'dataset': 'experiment', 'degree': 'seed', 'features': 'number_of_variables',
         'samples': 'number_of_samples', 'runtime_seconds': 'runtime_s',
         'f1score': 'f1', 'cycle_lazy_cuts': 'cycle_cuts',
         'clique_lazy_cuts': 'clique_cuts', 'clique_user_cuts': 'user_cuts',
-        'cycle_lazy_count': 'cycle_lazy_cuts',
-        'clique_lazy_count': 'clique_lazy_cuts',
-        'clique_user_count': 'clique_user_cuts',
         'explored_nodes': 'nodes', 'mipsol_rejection_pct': 'rejection_pct',
         'root_fractional_x_bins': 'root_x_bins',
         'ori_graph_density': 'ori_skeleton_density',
@@ -202,21 +186,13 @@ def _ensure_static_runtime_columns(path, target_columns):
     }
     migrated_rows = []
     for old_row in rows:
-        row = {column: old_row.get(column, '') for column in target_columns}
+        row = {column: old_row.get(column, '') for column in STATIC_RUNTIME_COLUMNS}
         for new_column, old_column in legacy_aliases.items():
-            if new_column in target_columns and not row.get(new_column):
+            if not row.get(new_column):
                 row[new_column] = old_row.get(old_column, '')
-        if 'lazy_count' in target_columns and not row.get('lazy_count'):
-            try:
-                row['lazy_count'] = str(
-                    int(float(row.get('cycle_lazy_count') or 0))
-                    + int(float(row.get('clique_lazy_count') or 0))
-                )
-            except (TypeError, ValueError):
-                row['lazy_count'] = ''
         migrated_rows.append(row)
     with path.open('w', newline='') as handle:
-        writer = csv.DictWriter(handle, fieldnames=target_columns)
+        writer = csv.DictWriter(handle, fieldnames=STATIC_RUNTIME_COLUMNS)
         writer.writeheader()
         writer.writerows(migrated_rows)
 
@@ -322,7 +298,7 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
         return
 
     run_output_dir = Path(output_dir)
-    prefix = _static_runtime_prefix(cfg)
+    prefix = _static_runtime_prefix(cfg.solver.name)
     scenario_key = _static_scenario_key(cfg)
     if prefix is None or scenario_key is None:
         return
@@ -339,14 +315,7 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
     solver_suffix = _static_solver_suffix(cfg)
     output_path = output_dir / f'{prefix}{dataset}_{solver_suffix}.csv'
 
-    diagnostics_enabled = bool(cfg.solver.get(
-        'experiment_diagnostics',
-        cfg.solver.get('optimization_diagnostics', False),
-    ))
-    output_columns = (
-        STATIC_RUNTIME_COLUMNS if diagnostics_enabled else COMPACT_RUNTIME_COLUMNS
-    )
-    _ensure_static_runtime_columns(output_path, output_columns)
+    _ensure_static_runtime_columns(output_path)
     diagnostics = _read_ag_diagnostics(run_output_dir)
     final = diagnostics.get('final', {})
     derived = diagnostics.get('derived_metrics', {})
@@ -357,7 +326,6 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
     root_records = diagnostics.get('root_records', [])
     root = root_records[0] if root_records else {}
     progress_rows = _read_progress_rows(run_output_dir)
-    last_progress = progress_rows[-1] if progress_rows else {}
     separation_attempts = diagnostics.get('separation_attempt_counts', {})
     callbacks_with_cuts = diagnostics.get('callbacks_with_cuts', {})
     method_details = final.get('method_details', {})
@@ -375,21 +343,14 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
     d = int(cfg.problem.number_of_variables)
     experiment = str(cfg.experiment)
     method_match = re.match(r'^METHOD_([A-G])', experiment)
-    case_label = CLIQUE_EXPERIMENT_FILE_LABELS.get(experiment)
     row = {
-        'method': (
-            f'clique-{case_label}'
-            if str(cfg.solver.name) in CLIQUE_FAMILY_SOLVERS and case_label
-            else str(cfg.solver.name)
-        ),
         'dataset': dataset,
         'features': features,
         'samples': samples,
         'p': _static_problem_p_value(cfg),
         'status': 'FINISHED',
         'method_family': method_match.group(1) if method_match else '',
-        'method_variant': cfg.solver.get(
-            'experiment_variant', cfg.solver.get('method_variant', '')),
+        'method_variant': cfg.solver.get('method_variant', ''),
         'experiment': experiment,
         'edge_ratio': cfg.problem.get('intra_edge_ratio', cfg.problem.get('edge_ratio')),
         'seed': cfg.problem.get('seed'),
@@ -415,21 +376,15 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
         'nodes_per_s': final.get('nodes_per_second'),
         'lp_iter_per_node': derived.get('lp_iterations_per_node'),
         'lp_iter_per_s': derived.get('lp_iterations_per_second'),
-        'root_bound': root.get('root_bound'),
+        'root_bound': root.get('bound'),
         'bound_gain': derived.get('bound_gain'),
         'bound_gain_per_1k_nodes': derived.get('bound_gain_per_1000_nodes'),
-        'root_fractional_edges': root.get('fractional_edge_count'),
-        'root_fractional_x_bins': (
-            '|'.join(str(int(root.get(key, 0) or 0)) for key in (
-                'x_le_001_count', 'x_001_01_count', 'x_01_05_count',
-                'x_05_099_count', 'x_ge_099_count',
-            )) if root else None
-        ),
-        'root_small_x_large_w': root.get('small_x_large_w_001_01'),
+        'root_fractional_edges': root.get('fractional_edges'),
+        'root_fractional_x_bins': root.get('x_histogram'),
+        'root_small_x_large_w': root.get('small_x_large_w_count'),
         'root_mean_big_m_ratio': root.get('mean_big_m_ratio'),
-        'root_violated_cliques': root.get('violated_clique_count'),
-        'root_max_clique_violation': root.get(
-            'max_fractional_clique_violation'),
+        'root_violated_cliques': root.get('violated_cliques'),
+        'root_max_clique_violation': root.get('max_clique_violation'),
         'callback_s': callback_s,
         'callback_pct': callback_pct,
         'search_s': runtime_seconds - callback_s if callback_s is not None else None,
@@ -448,10 +403,6 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
         'cycle_lazy_cuts': cycle_cuts,
         'clique_lazy_cuts': clique_cuts,
         'clique_user_cuts': user_cuts,
-        'lazy_count': lazy_count,
-        'cycle_lazy_count': cycle_cuts,
-        'clique_lazy_count': clique_cuts,
-        'clique_user_count': user_cuts,
         'unique_cuts': sum(cut_unique.get(kind, 0) for kind in ('cycle', 'clique')),
         'duplicate_cuts': sum(cut_duplicates.get(kind, 0) for kind in ('cycle', 'clique')),
         'cycle_unique_cuts': cut_unique.get('cycle'),
@@ -466,11 +417,7 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
                                 ('cycle_detection_time', 'cycle_submission_time')),
         'clique_callback_s': sum(callback_costs.get(key, 0) for key in
                                  ('clique_detection_time', 'clique_submission_time')),
-        'open_nodes': (
-            final.get('open_nodes')
-            if final.get('open_nodes') is not None
-            else last_progress.get('open_nodes')
-        ),
+        'open_nodes': final.get('open_nodes'),
         'solution_count': final.get('solution_count'),
         'shd': acc.get('shd'),
         'nnz': acc.get('nnz'),
@@ -507,9 +454,7 @@ def _append_static_runtime_csv(cfg, runtime_seconds, gap, lazy_count, acc,
     }
     write_header = not output_path.exists()
     with output_path.open('a', newline='') as handle:
-        writer = csv.DictWriter(
-            handle, fieldnames=output_columns, extrasaction='ignore'
-        )
+        writer = csv.DictWriter(handle, fieldnames=STATIC_RUNTIME_COLUMNS)
         if write_header:
             writer.writeheader()
         writer.writerow(row)
@@ -697,10 +642,34 @@ def start_experiment(cfg: DictConfig) -> None:
                     solve_kwargs["max_out_degree"] = degree_value
             elif cfg.solver.name == 'milp_clique':
                 solve_fn = solve_milp_clique.solve
+            elif cfg.solver.name == 'delayed_separation':
+                solve_fn = solve_delayed_separation.solve
                 with open_dict(cfg.solver):
                     cfg.solver.diagnostics_output_dir = output_dir
-            elif cfg.solver.name == 'milp_cliquewidth':
-                solve_fn = solve_milp_cliquewidth.solve
+            elif cfg.solver.name == 'controlled_cut_addition':
+                solve_fn = solve_controlled_cut_addition.solve
+                with open_dict(cfg.solver):
+                    cfg.solver.diagnostics_output_dir = output_dir
+            elif cfg.solver.name == 'repair_incumbent':
+                solve_fn = solve_repair_incumbent.solve
+                with open_dict(cfg.solver):
+                    cfg.solver.diagnostics_output_dir = output_dir
+            elif cfg.solver.name == 'fractional_separation':
+                solve_fn = solve_fractional_separation.solve
+                with open_dict(cfg.solver):
+                    cfg.solver.diagnostics_output_dir = output_dir
+            elif cfg.solver.name == 'bigm_relaxation':
+                solve_fn = solve_bigm_relaxation.solve
+                with open_dict(cfg.solver):
+                    cfg.solver.diagnostics_output_dir = output_dir
+            elif cfg.solver.name == 'stronger_clique_cuts':
+                solve_fn = solve_stronger_clique_cuts.solve
+                with open_dict(cfg.solver):
+                    cfg.solver.diagnostics_output_dir = output_dir
+            elif cfg.solver.name == 'time_limit_optimization':
+                solve_fn = solve_time_limit_optimization.solve
+                with open_dict(cfg.solver):
+                    cfg.solver.diagnostics_output_dir = output_dir
 
             solve_result = solve_fn(**solve_kwargs)
             if cfg.solver.name in clique_family_solvers:
